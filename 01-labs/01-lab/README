@@ -1,0 +1,114 @@
+files:
+
+  README            this file
+
+  statfor.pdf       statistics formulas
+  statfor.f         a fortran implementation of formulas in statfor.pdf
+
+  0_pseudorandom.c  use the C generator of pseudorandom numbers
+  1_tower.c         sampling a discrete random variable
+  2_exp.c           sampling an exponential distribution
+  3_pow.c           sampling a power law
+  4_gauss.c         sampling a gaussian (Box-Muller)
+  5_gauss.c         sampling a gaussian (central limit theorem)
+  6_intpow.c        calculating a Monte Carlo integral,
+                    with an example of infinite variance
+  7_intpow.c        an example of importance sampling
+
+  m1.c              sampling a gaussian with the metropolis algorithm
+  m2.c              harmonic oscillator
+
+--------------------------------------------------------------------------------
+
+compiling and running the codes:
+
+* use a C compiler (here $ is the shell prompt, we use the gcc GNU compiler
+  and get by default an executable named "a.out"), for instance:
+
+          $ gcc 0_pseudorandom.c -lm 
+
+* run the executable; if needed redirect the standart output to a file,
+  for instance "outfile":
+
+          $ ./a.out > outfile
+
+--------------------------------------------------------------------------------
+
+how to use "statfor":
+
+* compile with a fortran compiler (we use the "gfortran" GNU compiler and 
+  we choose "statfor.x" as the name of the executable):
+
+          $ gfortran statfor.f -o statfor.x
+
+* input:  a list of numbers from the stantard input
+
+
+* output: 1) on the standard output: average, variance, correlation time,
+             effective number of points and statistical error on the average;
+          2) on file 'histo.out': a 101-bin histogram of the data;
+          3) on file 'corr.out': the data autocorrelation function;
+          4) on file 'blocking.out': the reblockin analysis of the data.
+
+          the definition of all the above quantities is given in "statfor.pdf"
+
+* to process data contained in the first column of a file "outfile" 
+  redirect the standard input of the executable:
+          
+          $ ./statfor.x < outfile 
+
+  if you use the keyboard to type the list of numbers, type ctrl-d after 
+  the last number, otherwise the code waits for more numbers
+
+* to process data contained in (say) the third column of a file: 
+
+          $ awk '{print $3}' outfile | ./statfor.x
+
+  here "awk" is a unix command that select the third column of file "outfile",
+  and the pipe symbol "|" is a unix feature which takes the standard output
+  of the command on the left and gives it to the standard input of the
+  executable on the right
+
+* to plot the histogram in file 'histo.out' using gnuplot:
+
+          $ gnuplot
+          gnuplot> plot 'histo.out' using 1:2 with lines
+
+--------------------------------------------------------------------------------
+
+Exercises with direct sampling (more details in comments of the C codes). 
+Use statfor (see above) to get data histograms, calculate averages, etc.
+
+0) Sample uniform distributions of integer or real numbers (0_pseudorandom.c).
+
+1) Transform uniform random numbers to sample different distributions:
+
+   * sample integers in (1,k) with non-uniform probability (1_tower.c)
+
+   * sample exp(-x) (2_exp.c)
+
+   * sample (x^k)*(k+1) in (0,1) (3_pow.c)
+
+   * sample a gaussian using the Box-Muller algorithm (4_gauss.c)
+
+   * sample a gaussian using the central limit theorem (5_gauss.c)
+
+2) Monte Carlo calculation of integrals:
+
+   * calculate \int_0^1 x^gamma dx sampling pi(x)=1 for gamma=1, -0.4, -0.8;
+     note the effect of infinite variance for gamma=-0.8 (6_intpow.c)
+
+   * calculate \int_0^1 x^(-0.8)
+     sampling the distribution (x^k)*(k+1) with k=-0.7; show that importance 
+     sampling removes the divergence of the variance (7_intpow.c). 
+
+--------------------------------------------------------------------------------
+
+Metropolis sampling
+
+0) sample a gaussian with moves uniformly distributed around the current 
+   position (m1.c).
+
+1) calculate ground state properties of the harmonic oscillator;
+   analyze the results (equilibration steps, average, statistical error,
+   autocorrelation as a function of the size of the move) (m2.c).
