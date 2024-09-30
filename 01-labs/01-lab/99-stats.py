@@ -2,10 +2,12 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-filename = "/home/guilhermebaos/QUARMEN-Lessons/01-labs/01-lab/00-random-out.txt"
+filename = "/home/guilhermebaos/QUARMEN-Lessons/01-labs/01-lab/output.txt"
+column = 1
 
 # Load the data
 data = np.loadtxt(filename, delimiter=',', dtype=float)
+data = data[:, column]
 samples = len(data)
 
 # Prepare the figure

@@ -8,6 +8,7 @@
 // sampling, i.e. larger n, gives more precise estimates of the assigned 
 // probabilities.
 
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
@@ -16,12 +17,13 @@ double rnd();
 
 int main () {
   int i,j,n;
-  double x,s[6],f[6];
+  double x, s[6], f[6];
 
-  srandom((unsigned)time(NULL));
+  srand(time(NULL));
 
-  n=2000;                                  // number of samples
-  s[0]=0.0;
+  n = 20000;                                // number of samples
+  s[0] = 0.0;
+
   for (i=1; i<7; i++) {s[i]=s[i-1]+rnd();} // construct s[i], i=1,...,6
   for (i=1; i<7; i++) {s[i]=s[i]/s[6];}    // normalize so that s[6]=1
 
@@ -29,11 +31,12 @@ int main () {
   for (j=0; j<n; j++) {                    // loop on samples
     x = rnd();                             // pick a random number x in (0,1)
     i = 1;
+    
     while (s[i]<x) {i++;}                  // pick largest i such that s[i] < x
     f[i]++;                                // increment event counter for that i
   }
 
-  for (i=1; i<7; i++) {printf("%f %f\n",s[i]-s[i-1],f[i]/n);}
+  for (i=1; i<7; i++) {printf("%f,%f\n",s[i]-s[i-1],f[i]/n);}
 
 }
 
