@@ -1,0 +1,15 @@
+files: 
+
+* README:     this file
+
+
+* statforw.f: similar to statfor.f, except it calculates weighted averages
+              sum_i (a_i*w_i) / sum_i w_i (as opposed to simple averages)
+
+  on input:   reads from the standard input two lists of numbers (a_i*w_i, w_i)
+
+  on output:  similar to statfor.f, except there is an effective number
+              neff = (sum_i w_i)^2 / sum_i w_i^2 due to the weighted average,
+
+
+* h.c:        a vmc simulation of the H atom

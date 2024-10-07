@@ -13,8 +13,8 @@
 double rnd();
 
 int main () {
-  int i,n;
-  double x,r;
+  int i, n;
+  double x, r;
 
   srandom((unsigned)time(NULL));
 
@@ -24,7 +24,6 @@ int main () {
     x = -log(1.0-r);       // random numbers distributed as exp(-x)
     printf("%10.5f\n",x);
   }
-
 }
 
 double rnd() {
