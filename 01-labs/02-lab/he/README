@@ -1,0 +1,12 @@
+files
+
+README:      this file
+
+he.c:        simple code for he with wave function psi_0
+
+eofbeta.out: collection of average values of energy and acceptance rate
+             as a function of the variational parameter beta (see he.c)
+
+eofbeta.png: plot of the energy data with a quadratic fit which gives
+             E_min=-2.836+/-0.013
+             beta_opt=1.721+/-0.027

@@ -13,6 +13,8 @@ N = len(data)
 k1 = int(0.05 * N)
 k2 = N-1
 
+icutoff = int(k2 * 0.8)
+
 Neq = k2 - k1 + 1
 
 
@@ -25,7 +27,7 @@ autocorrtotal = np.array([np.sum((data[0: N-i]-ave) * (data[0 + i: N]-ave)) for 
 print(autocorrtotal)
 
 autocorr = np.array([np.sum((data[k1: k2-i]-ave) * (data[k1 + i: k2]-ave)) for i in range(1, Neq)]) / (var * (Neq - 1))
-timecorr = 1 + 2 * np.sum(autocorr)
+timecorr = 1 + 2 * np.sum(autocorr[:icutoff])
 
 Neff = Neq / timecorr
 
