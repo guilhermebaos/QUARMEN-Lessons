@@ -15,7 +15,7 @@ int main () {
 
   n=10000;                              // number of monte carlo steps
   beta=1.3;                             // variational parameter
-  delta=0.4;                            // size of the move
+  delta=2.4;                            // size of the move
   x=10.0;                               // initial position x
   y=0.1;                                // initial position y
   z=0.01;                               // initial position z
@@ -43,6 +43,6 @@ int main () {
       epot=-1.0/r;                      //  + compute other properties  +
       etot=ekin+epot;                   //  +++++++++++++++++++++++++++++
     }
-    printf("%f %f %f %f %f %f\n",x,ekin,epot,etot,p,r);
+    printf("%f %f %f %f %f %f\n",etot,ekin,epot,x,p,r);
   }
 }
