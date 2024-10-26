@@ -23,10 +23,9 @@ ave = np.mean(data)
 std = np.std(data)
 var = np.var(data, mean=ave, ddof=1)
 
-autocorrtotal = np.array([np.sum((data[0: N-i]-ave) * (data[0 + i: N]-ave)) for i in range(0, N-1)]) / (var * (N - 1))
-print(autocorrtotal)
+autocorrtotal = np.array([np.sum((data[0: N-i]-ave) * (data[0 + i: N]-ave)) / (Neq - i) for i in range(0, N-1)]) / (var)
 
-autocorr = np.array([np.sum((data[k1: k2-i]-ave) * (data[k1 + i: k2]-ave)) for i in range(1, Neq)]) / (var * (Neq - 1))
+autocorr = np.array([np.sum((data[k1: k2-i]-ave) * (data[k1 + i: k2]-ave)) / (Neq - i) for i in range(1, Neq)]) / (var)
 timecorr = 1 + 2 * np.sum(autocorr[:icutoff])
 
 Neff = Neq / timecorr
