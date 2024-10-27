@@ -9,7 +9,8 @@ cat
 }
 ## VMC part
 
-file_indexer=0
+file_indexer=$(find . -type f -name "*.vmc*" -exec grep -Fl "$process_name" {} + | wc -l)
+weight_col=-1
 
 Input_QMC(){
 	echo "What VMC arguments do you want? To deliver the arguments press Ctrl+D. (it may take sometime)"
@@ -36,12 +37,27 @@ Analysis(){
 	echo "We now do the analysis of our vmc/dmc sim"
 	local chosen_index=${1:-$file_indexer}
 	echo "Energy\n"
-	grep elocal "$process_name$chosen_index.vmc" | ./statforw.x | tee "${process_name}${chosen_index}_elocal.out"
+	if [[ $weight_col == -1 ]];then
+		Find_Weight "$process_name$chosen_index.vmc"
+	fi
+	grep elocal "$process_name$chosen_index.vmc" | awk "{print \$1, \$$weight_col}"  | ./statforw.x | tee "${process_name}${chosen_index}_elocal.out"
 	echo "Acceptance rate\n"
-	grep "acc.rate" "$process_name$chosen_index.vmc" | ./statforw.x| tee "${process_name}${chosen_index}_accrate.out"
+	grep "acc.rate" "$process_name$chosen_index.vmc" | awk "{print \$1, \$$weight_col}" | ./statforw.x| tee "${process_name}${chosen_index}_accrate.out"
 	gnuplot -persist <<-EOF 
 	plot '< grep elocal $process_name${chosen_index}.vmc' u 0:1 with lines
 	EOF
+}
+
+Find_Weight(){
+	local file=$1
+	for n in {2..4}; do
+		output1=$(grep elocal "$file" | awk "{print \$$n}")
+		output2=$(grep "acc.rate" "$file" | awk "{print \$$n}")
+		if [[ "$output1" == "$output2" && -n "$output1"  ]];then
+			weight_col=$n
+		fi
+	done
+	echo "Collumn found for weights: $weight_col"
 }
 
 Delete(){
@@ -60,6 +76,8 @@ while true ; do
 	if [[ -z "$process_name" ]]; then
 		echo "Type the name of your program"
 		read process_name
+		file_indexer=$(find . -type f -name "*.vmc*" -exec grep -Fl "$process_name" {} + | wc -l)
+
 	fi
 
 
