@@ -14,7 +14,7 @@ int main () {
   srand48((unsigned)time(NULL));        // initialization of rng
 
   n=10000;                              // number of monte carlo steps
-  beta=1.3;                             // variational parameter
+  beta=1.1;                             // variational parameter
   delta=2.4;                            // size of the move
   x=10.0;                               // initial position x
   y=0.1;                                // initial position y
