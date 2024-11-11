@@ -1,0 +1,15 @@
+&INPUTPP
+prefix='neon'
+plot_num=0
+outdir='./tmp'
+filplot='neon.rho.out'
+&end
+
+&PLOT
+nfile=1
+weight(1)=1.0
+iflag=3
+output_format=3
+fileout='neon.rho.xsf',
+nx=32,ny=32,nz=32
+&end
