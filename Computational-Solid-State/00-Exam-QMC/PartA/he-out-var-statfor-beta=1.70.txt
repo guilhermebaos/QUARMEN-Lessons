@@ -1,0 +1,5 @@
+average                                         -2.9082984208
+variance                                         0.9710090316
+autocorrelation time                             9.8080087405
+n, n eff                                      1376.4261795810
+statistical error                                0.0265604343

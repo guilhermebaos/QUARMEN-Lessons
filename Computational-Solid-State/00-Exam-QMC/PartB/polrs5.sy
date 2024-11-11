@@ -1,0 +1,10 @@
+  ndim 2                                                                        
+  type up 21 4.0000000000000001E-002 polrs5.up.x                                
+  v2 up up polrs5.v 1                                                           
+  v0 -10.870041954209139                                                        
+  u2 up up polrs5.u                                                             
+  pbc 8.1224039375904997 8.1224039375904997                                     
+  kspace polrs5.k                                                               
+  u3 up up polrs5.u3                                                            
+  rhok up                                                                       
+  backflow up up polrs5.b                                                       
