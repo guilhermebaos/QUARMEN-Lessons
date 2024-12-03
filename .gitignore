@@ -1,2 +1,6 @@
 venv/
 /Computational-Solid-State/00-Exam-QMC/Outputs
+*.dat
+/Computational-Solid-State/q-e-qe-7.3
+Computational-Solid-State/qe-7.3.1.tar.gz
+Computational-Solid-State/qe-7.3.tar.gz

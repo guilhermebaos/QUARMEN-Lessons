@@ -1,0 +1,27 @@
+&CONTROL
+  calculation = 'nscf'
+  restart_mode = 'from_scratch'
+  outdir = './tmp'
+  pseudo_dir = '../PSEUDO'
+  prefix = 'allu'
+  tstress = .true.
+  tprnfor = .true.
+/
+&SYSTEM
+  ibrav = 2
+  celldm(1) = 7.653391
+  nat = 1
+  ntyp = 1
+  ecutwfc = 40, nbnd=10,
+!  occupations = 'smearing', smearing='gauss', degauss=0.02
+occupations='tetrahedra'
+/
+&ELECTRONS
+  conv_thr = 1.0e-6
+/
+ATOMIC_SPECIES
+  Al  26.98  Al.LDA.upf
+ATOMIC_POSITIONS crystal
+  Al  0.00   0.00   0.00
+K_POINTS automatic
+  16 16 16 0 0 0

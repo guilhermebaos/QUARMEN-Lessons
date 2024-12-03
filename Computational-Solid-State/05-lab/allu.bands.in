@@ -1,0 +1,31 @@
+&CONTROL
+  calculation = 'bands'
+  restart_mode = 'from_scratch'
+  outdir = './tmp'
+  pseudo_dir = './PSEUDO'
+  prefix = 'allu'
+  tstress = .true.
+  tprnfor = .true.
+/
+&SYSTEM
+  ibrav = 2
+  celldm(1) = 7.653391
+  nat = 1
+  ntyp = 1
+  ecutwfc = 40, nbnd=10,
+occupations='fixed'
+/
+&ELECTRONS
+  conv_thr = 1.0e-6
+/
+ATOMIC_SPECIES
+  Al  26.98  Al.LDA.upf
+ATOMIC_POSITIONS crystal
+  Al  0.00   0.00   0.00
+ K_POINTS (crystal_b)
+5
+0.00  0.00  0.00   40
+0.50  0.50  0.00   40
+0.75  0.50  0.25   40
+0.50  0.00  0.00   40
+0.00  0.00  0.00   40

@@ -1,0 +1,7 @@
+&dos
+prefix = 'neon',
+outdir = './tmp',
+Emin = -40,
+Emax = 20,
+DeltaE = 0.01
+&end

@@ -1,0 +1,31 @@
+&CONTROL
+  calculation = 'bands'
+  restart_mode = 'from_scratch'
+  outdir = './tmp'
+  pseudo_dir = './PSEUDO'
+  prefix = 'neon'
+  tstress = .true.
+  tprnfor = .true.
+/
+&SYSTEM
+  ibrav = 2
+  celldm(1) = 8.43
+  nat = 1
+  ntyp = 1
+  ecutwfc = 80
+  occupations = 'fixed', nbnd=8
+/
+&ELECTRONS
+  conv_thr = 1.0e-6
+/
+ATOMIC_SPECIES
+  Ne  20.18  Ne.LDA.upf
+ATOMIC_POSITIONS crystal
+  Ne   0.00   0.00   0.00
+K_POINTS (crystal_b)
+  5
+0.00 0.00 0.00 40  ! Gamma
+0.50 0.50 0.00 40  ! X
+0.75 0.50 0.25 40  ! W
+0.50 0.00 0.00 40  ! L
+0.00 0.00 0.00 40  ! Gamma

@@ -1,0 +1,6 @@
+&BANDS
+prefix = 'neon',
+outdir = './tmp/',
+filband = 'neon.bands.dat',
+lsym = .true.
+&end

@@ -1,0 +1,7 @@
+&dos
+prefix = 'allu',
+outdir = './tmp',
+Emin = -12,
+Emax = 10,
+DeltaE = 0.01
+&end
