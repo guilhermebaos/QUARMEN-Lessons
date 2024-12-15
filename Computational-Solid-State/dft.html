@@ -26,7 +26,12 @@
 
     const codeText = [
       `${start}/pw.x < ${name}.scf.in > ${name}.scf.out`,
+      ``,
+      `bash ${start}2/pwo2xsf.sh --inicoor ${name}.scf.out > ${name}.scf.xsf`,
       `${start}/pp.x < ${name}.rho.in > ${name}.rho.out`,
+      ``,
+      `bash ${name}.test-ecut.sh`,
+      `bash ${name}.test-kk.sh`,
       ``,
       `${start}/pw.x < ${name}.bands.in > ${name}.bands.out`,
       `${start}/bands.x < ${name}.bands.calc.in > ${name}.bands.calc.out`,

@@ -9,7 +9,7 @@ filplot='LiB2.rho.out'
 nfile=1
 weight(1)=1.0
 iflag=3
-output_format=3
+output_format=5
 fileout='LiB2.rho.xsf',
 nx=32,ny=32,nz=32
 &end

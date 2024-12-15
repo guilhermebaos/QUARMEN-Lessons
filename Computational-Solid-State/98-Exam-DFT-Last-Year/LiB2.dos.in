@@ -1,0 +1,7 @@
+&dos
+prefix = 'LiB2',
+outdir = './tmp',
+Emin = -50,
+Emax = 20,
+DeltaE = 0.01
+&end
