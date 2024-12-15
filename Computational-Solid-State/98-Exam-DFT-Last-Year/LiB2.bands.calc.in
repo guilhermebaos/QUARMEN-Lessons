@@ -1,0 +1,6 @@
+&BANDS
+prefix = 'LiB2',
+outdir = './tmp/',
+filband = 'LiB2.bands.dat',
+lsym = .true.
+&end

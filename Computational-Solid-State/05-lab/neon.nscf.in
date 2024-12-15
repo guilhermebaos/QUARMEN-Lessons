@@ -1,4 +1,3 @@
-
 &CONTROL
   calculation = 'nscf'
   restart_mode = 'from_scratch'
