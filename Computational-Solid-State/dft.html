@@ -22,7 +22,7 @@
   <script>
     // Define an array of initial code snippets
     const start = "$QESP"
-    const name = "LiB2"
+    const name = "Si"
 
     const codeText = [
       `${start}/pw.x < ${name}.scf.in > ${name}.scf.out`,
@@ -40,6 +40,7 @@
       `${start}/dos.x < ${name}.dos.in > ${name}.dos.out`,
       ``,
       `${start}/pw.x < ${name}.vcrelax.in > ${name}.vcrelax.out`,
+      `grep "Final enthalpy" ${start}.vcrelax.*.out > ${start}.vcrelax.enth`,
     ]
 
     function createCodeBlocks() {
