@@ -22,10 +22,11 @@
   <script>
     // Define an array of initial code snippets
     const start = "$QESP"
-    const name = "Si"
+    const name = "AlO"
 
     const codeText = [
       `${start}/pw.x < ${name}.scf.in > ${name}.scf.out`,
+      `${start}/pw.x < ${name}.scf.p0.in > ${name}.scf.out`,
       ``,
       `bash ${start}2/pwo2xsf.sh --inicoor ${name}.scf.out > ${name}.scf.xsf`,
       `${start}/pp.x < ${name}.rho.in > ${name}.rho.out`,

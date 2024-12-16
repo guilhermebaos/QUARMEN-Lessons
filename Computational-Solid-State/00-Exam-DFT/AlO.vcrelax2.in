@@ -1,0 +1,35 @@
+&CONTROL
+  calculation = 'vc-relax'
+  restart_mode = 'from_scratch'
+  outdir = './tmp'
+  pseudo_dir = './PSEUDO'
+  prefix = 'AlO'
+  tstress = .true.
+  tprnfor = .true.
+/
+&SYSTEM
+  ibrav = 2
+  celldm(1) = 8.1444
+  nat = 2
+  ntyp = 2
+  ecutwfc = 80
+  occupations = 'tetrahedra_opt'
+/
+&ELECTRONS
+  conv_thr = 1.0e-6
+/
+&IONS
+  ion_dynamics = 'bfgs', trust_radius_ini = 0.1 
+/
+&CELL
+  cell_dynamics='bfgs'
+  press=0.0
+/
+ATOMIC_SPECIES
+  Al  26.982  Al_ONCV_PBE_sr.upf
+  O  15.999  O_ONCV_PBE_sr.upf
+ATOMIC_POSITIONS crystal
+  Al   0.00   0.00   0.00
+  O   0.50   0.50   0.50
+K_POINTS automatic
+  8 8 8 0 0 0

@@ -1,0 +1,7 @@
+&dos
+prefix = 'AlO',
+outdir = './tmp',
+Emin = -15,
+Emax = 25,
+DeltaE = 0.01
+&end

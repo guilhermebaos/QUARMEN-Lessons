@@ -1,0 +1,6 @@
+&BANDS
+prefix = 'AlO',
+outdir = './tmp/',
+filband = 'AlO.bands.dat',
+lsym = .true.
+&end
