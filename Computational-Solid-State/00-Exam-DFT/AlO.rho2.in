@@ -1,0 +1,17 @@
+&INPUTPP
+prefix='AlO'
+plot_num=0
+outdir='./tmp'
+filplot='cubic.2d.dat'
+&end
+
+&PLOT
+iflag = 2, ! 2D planar plot
+output_format = 7, ! Output format for 2D grid (gnuplot format)
+fileout = 'cubic_002.gnuplot', ! File to store the plane data
+nx = 100, ny = 100, ! Grid points in x and y (adjust as needed)
+e1(1) = 2.0, e1(2) = 0.0, e1(3) = 0.0, ! First vector (along [100])
+e2(1) = 0.0, e2(2) = 2.0, e2(3) = 0.0, ! Second vector (orthogonal to [010])
+x0(1) = -1.0, x0(2) = -1.0, x0(3) = 0.0 ! Origin of the plane
+/
+&end
