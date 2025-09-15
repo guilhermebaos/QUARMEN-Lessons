@@ -1,0 +1,49 @@
+
+Running time for tnum = 1
+
+real	0m2.959s
+user	0m2.942s
+sys	0m0.005s
+ 
+Running time for tnum = 2
+
+real	0m1.499s
+user	0m2.974s
+sys	0m0.001s
+ 
+Running time for tnum = 3
+
+real	0m0.922s
+user	0m2.735s
+sys	0m0.003s
+ 
+Running time for tnum = 4
+
+real	0m0.819s
+user	0m3.038s
+sys	0m0.003s
+ 
+Running time for tnum = 5
+
+real	0m0.960s
+user	0m3.059s
+sys	0m0.003s
+ 
+Running time for tnum = 6
+
+real	0m0.734s
+user	0m2.869s
+sys	0m0.004s
+ 
+Running time for tnum = 7
+
+real	0m1.028s
+user	0m3.112s
+sys	0m0.002s
+ 
+Running time for tnum = 8
+
+real	0m1.013s
+user	0m3.141s
+sys	0m0.004s
+ 
