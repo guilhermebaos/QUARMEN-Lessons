@@ -1,0 +1,8 @@
+\begin{align*}
+
+\lang c_{-\textbf k\darr}(\tau)c_{\textbf k\uarr}(\tau)c^\dag_{\textbf k\uarr}c^\dag_{-\textbf k\darr}\rang_0 &\sim \frac1{Z_\uarr} \cdot \frac1{Z_\darr}\sum_{\{n_{\textbf p\alpha}\}} \lang \{n_{\textbf p\alpha}\} \mid e^{-\beta H_{\text{HK}\darr}}c_{-\textbf k\darr}(\tau)c^\dag_{-\textbf k\darr}e^{-\beta H_{\text{HK}\uarr}}c_{\textbf k\uarr}(\tau)c^\dag_{\textbf k\uarr} \mid \{n_{\textbf p\alpha}\}\rang
+\\\\
+
+&= \frac1{Z_\darr}\cdot \frac1{Z_\uarr}\sum_{\{n_{\textbf p\alpha}\}} \lang \{n_{\textbf p\darr}\} \mid e^{-\beta H_{\text{HK}\darr}}c_{-\textbf k\darr}(\tau)c^\dag_{-\textbf k\darr} \mid \{n_{\textbf p\darr}\}\rang \lang \{n_{\textbf p\uarr}\} \mid e^{-\beta H_{\text{HK}\uarr}}c_{\textbf k\uarr}(\tau)c^\dag_{\textbf k\uarr} \mid \{n_{\textbf p\uarr}\}\rang
+
+\end{align*}
