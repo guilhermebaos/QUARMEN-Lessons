@@ -1,0 +1,17 @@
+            n_pk_ppi_u, n_pk_ppi_d, n_mk_ppi_u, n_mk_ppi_d, n_pk_npi_u, n_pk_npi_d, n_mk_npi_u, n_mk_npi_d = fock(st)
+
+            if n_mk_npi_d * n_pk_npi_u:
+                bra_pk_npi = self.lookup[st - 8 - 1]
+                self.bk_tk_tpi_t[bra_pk_npi, ket] = (-1)**(n_pk_npi_u-1 + n_pk_npi_d + n_mk_npi_u)
+            
+            if n_pk_npi_d * n_mk_npi_u:
+                bra_mk_npi = self.lookup[st - 4 - 2]
+                self.bk_tk_tpi_t[bra_mk_npi, ket] = (-1)**(n_pk_npi_d)
+            
+            if n_pk_ppi_u * n_mk_ppi_d:
+                bra_pk_ppi = self.lookup[st - 128 - 16]
+                self.bk_tk_tpi_t[bra_pk_ppi, ket] = (-1)**(n_pk_ppi_u-1 + n_pk_ppi_d + n_mk_ppi_u)
+            
+            if n_pk_ppi_d * n_mk_ppi_u:
+                bra_mk_ppi = self.lookup[st - 64 - 32]
+                self.bk_tk_tpi_t[bra_mk_ppi, ket] = (-1)**(n_pk_ppi_d)
