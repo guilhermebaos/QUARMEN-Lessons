@@ -1,17 +1,8 @@
-            n_pk_ppi_u, n_pk_ppi_d, n_mk_ppi_u, n_mk_ppi_d, n_pk_npi_u, n_pk_npi_d, n_mk_npi_u, n_mk_npi_d = fock(st)
+\begin{align*}
 
-            if n_mk_npi_d * n_pk_npi_u:
-                bra_pk_npi = self.lookup[st - 8 - 1]
-                self.bk_tk_tpi_t[bra_pk_npi, ket] = (-1)**(n_pk_npi_u-1 + n_pk_npi_d + n_mk_npi_u)
-            
-            if n_pk_npi_d * n_mk_npi_u:
-                bra_mk_npi = self.lookup[st - 4 - 2]
-                self.bk_tk_tpi_t[bra_mk_npi, ket] = (-1)**(n_pk_npi_d)
-            
-            if n_pk_ppi_u * n_mk_ppi_d:
-                bra_pk_ppi = self.lookup[st - 128 - 16]
-                self.bk_tk_tpi_t[bra_pk_ppi, ket] = (-1)**(n_pk_ppi_u-1 + n_pk_ppi_d + n_mk_ppi_u)
-            
-            if n_pk_ppi_d * n_mk_ppi_u:
-                bra_mk_ppi = self.lookup[st - 64 - 32]
-                self.bk_tk_tpi_t[bra_mk_ppi, ket] = (-1)**(n_pk_ppi_d)
+H &= -t\sum_{\langle i, j\rangle}\sum_\sigma c_{i\sigma}^\dagger c_{j\sigma} + c_{j\sigma}^\dagger c_{i\sigma} - \mu N
+\\[0.8cm]
+
+&\quad\ + \frac{U}{V} \sum_{j_1,\, \dots,\,  j_4}c^\dagger_{j_1, \uparrow}c_{j_2, \uparrow}c^\dagger_{j_3, \downarrow}c_{j_4, \downarrow}\delta_{j_1 + j_3, j_2 + j_4}
+
+\end{align*}
