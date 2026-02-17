@@ -1,8 +1,0 @@
-\begin{align*}
-
-H &= -t\sum_{\langle i, j\rangle}\sum_\sigma c_{i\sigma}^\dagger c_{j\sigma} + c_{j\sigma}^\dagger c_{i\sigma} - \mu N
-\\[0.8cm]
-
-&\quad\ + \frac{U}{V} \sum_{j_1,\, \dots,\,  j_4}c^\dagger_{j_1, \uparrow}c_{j_2, \uparrow}c^\dagger_{j_3, \downarrow}c_{j_4, \downarrow}\delta_{j_1 + j_3, j_2 + j_4}
-
-\end{align*}
