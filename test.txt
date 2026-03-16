@@ -1,0 +1,1 @@
+(c_{k\darr}^\dag - c_{k+\pi\darr}^\dag + c_{k\uarr}^\dag + c_{k+\pi\uarr}^\dag)(c_{k\uarr} + c_{k+\pi\uarr} + c_{k\darr} - c_{k+\pi\darr})
