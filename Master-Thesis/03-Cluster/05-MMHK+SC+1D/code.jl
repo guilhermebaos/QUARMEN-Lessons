@@ -633,6 +633,9 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::Str
     
     file_str = replace(replace(title_str, " = " => ""), " " => "-") * ".h5"
 
+    # Create outputs folder
+    mkpath(joinpath(@__DIR__, "outputs"))
+
     # Save the data next to this file
     save_path = joinpath(@__DIR__, "outputs", file_str)
 
@@ -641,6 +644,7 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::Str
 
     # Save the data
     hdf.h5open(save_path, "w") do file
+        
         # Save outputs
         hdf.write(file, "x_data", ss)
         hdf.write(file, "y_data", ooTyped)
@@ -672,7 +676,7 @@ W = 4
 # Parameters
 params = Dict{String, Real}(
     "nMMHK" => 1,
-    "L" => 100,
+    "L" => 500,
     "mu" => 0,
     "U" => 0,
     "g" => 0,
@@ -685,11 +689,11 @@ sweep1 = Dict(
     "param" => "mu",
     "min" => -2,
     "max" => +2,
-    "ste" => 100
+    "ste" => 50
 )
 
 
-plot1D(params, sweep1, "n")
+@time plot1D(params, sweep1, "n")
 
 
 
