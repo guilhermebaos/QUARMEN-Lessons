@@ -1,5 +1,6 @@
 # Imports
 import Base
+import LinearAlgebra as la
 
 
 # ----- HELPER FUNCTIONS -----
@@ -140,6 +141,9 @@ And for n = 2:
 =#
 
 """
+    npos(k::Int, alpha::Int, sigma::Int, nMMHK::Int)
+
+Returns the position of the occupation number for state (k, α, σ).
 
 # Arguments
 - `k::Int`: Use k = 0 for +k and k = 1 for -k.
@@ -152,6 +156,9 @@ And for n = 2:
 function npos(k::Int, alpha::Int, sigma::Int, nMMHK::Int)
     return 1 + k * (2 * nMMHK) + (alpha - 1) * 2 + sigma
 end
+
+
+
 
 
 # ----- SUBSPACES -----
@@ -169,17 +176,25 @@ struct Subspace
     lookup::Dict{Int64, Int64}
 
     # Operators
-    ops::Dict{String, Union{Matrix{Int64}, Matrix{ComplexF32}}}
+    ops::Dict{String, Union{Matrix{Int64}, Matrix{Float64}, Matrix{ComplexF32}}}
 end
 
 
-# Print the subspace
+"""
+    Base.show(io::IO, sub::Subspace)
+
+Print the properties of the subspace.
+"""
 function Base.show(io::IO, sub::Subspace)
     print(io, "Space with S = $(sub.spin) contains $(length(sub.states)) states: $(sub.states).")
 end
 
 
-# Elementary properties of the subspaces
+"""
+    startSubs(modes::Int)
+
+Compute the elementary properties of the subspaces.
+"""
 function startSubs(modes::Int)
     # Dimension of the Fock space
     dim = 2^modes
@@ -225,7 +240,12 @@ end
 
 
 # ----- OPERATORS -----
-function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int)
+"""
+    buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int, mu::Real, U::Real)
+    
+Build the operators of this subspace which are independent of k and of any order parameters.
+"""
+function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int, mu::Real, U::Real)
     # Compute dimension
     dimension = length(states)
     
@@ -245,6 +265,9 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
     
     ops["bk_tk"] = zeros(Int64, dimension, dimension)
     ops["fmk"] = zeros(Int64, dimension, dimension)
+    
+    ops["hamHK"] = zeros(Int64, dimension, dimension)
+    ops["hamMU"] = zeros(Int64, dimension, dimension)
 
 
     # Fill in the operators
@@ -266,6 +289,13 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
         # Number of particles at +k and -k
         ops["nk_pk_ts"][ket, ket] = sum(n * (pos <= modes / 2) for (pos, n) in enumerate(st_list))
         ops["nk_mk_ts"][ket, ket] = sum(n * (pos >  modes / 2) for (pos, n) in enumerate(st_list))
+
+
+        # Chemical Potential H = -μN
+        ops["hamMU"][ket, ket] = -mu * sum(st_list)
+
+        # Hatugai-Kohmoto Interaction H = U n(k, α, ↑)n(k, α, ↓) (we use the fact that up and down spins are next to each other on the list)
+        ops["hamHK"][ket, ket] = U * sum(st_list[2*index - 1] * st_list[2*index] for index in 1:fld(modes, 2))
 
 
         # Applying bk to this state for each alpha (st is the ket, we find the bra)
@@ -308,13 +338,20 @@ end
 
 
 """
-    Create the Hamiltonian, without any of the self-consistent parameters!
-"""
-function buildHamBase!(sub::Subspace, nMMHK::Int, modes::Int, k::Real, mu::Real, U::Real, Delta::Number)
+    buildHamTB!(sub::Subspace, nMMHK::Int, modes::Int, k::Real)
 
-    # Empty Operators
-    sub.ops["hamTB+HK"] = zeros(ComplexF32, sub.dimension, sub.dimension)
+Create the tight-binding term of the Hamiltonian.
+"""
+function buildHamTB!(sub::Subspace, nMMHK::Int, modes::Int, k::Real)
+
+    # Empty Operator
     sub.ops["hamTB"] = zeros(ComplexF32, sub.dimension, sub.dimension)
+
+    # In this case the tight-binding term is just the usual dispersion
+    if nMMHK == 1
+        sub.ops["hamTB"] = 2 * cos(k) * sub.ops["nk_tk_ts"]
+        return
+    end
 
     # Fock 
     st_list = fock(0, modes)
@@ -324,15 +361,6 @@ function buildHamBase!(sub::Subspace, nMMHK::Int, modes::Int, k::Real, mu::Real,
 
         # Binary decomposition
         fock!(st, modes, st_list)
-
-
-        # Chemical Potential H = -μN
-        sub.ops["hamTB+HK"][ket, ket] += -mu * sum(st_list)
-
-
-        # Hatugai-Kohmoto Interaction H = U n(k, α, ↑)n(k, α, ↓) (we use the fact that up and down spins are next to each other on the list)
-        sub.ops["hamTB+HK"][ket, ket] += U * sum(st_list[2*index - 1] * st_list[2*index] for index in 1:fld(modes, 2))
-
 
         # Tight-binding operator H = t(α, β)c†(k, α, σ)c(k, β, σ)
         for alpha in 1:nMMHK
@@ -355,9 +383,9 @@ function buildHamBase!(sub::Subspace, nMMHK::Int, modes::Int, k::Real, mu::Real,
                         bra = sub.lookup[st + 2^(modes - nkas_pos) - 2^(modes - nkbs_pos)]
                         
                         if alpha == nMMHK
-                            sub.ops["hamTB"][bra, ket] = (-1)^sum(st_list[(nkbs_pos + 1):(nkas_pos - 1)]; init=0) * exp(im * k * (ksign == 0 ? 1 : -1))
+                            sub.ops["hamTB"][bra, ket] += (-1)^sum(st_list[(nkbs_pos + 1):(nkas_pos - 1)]; init=0) * exp(im * k * (ksign == 0 ? 1 : -1))
                         else
-                            sub.ops["hamTB"][bra, ket] = (-1)^sum(st_list[(nkas_pos + 1):(nkbs_pos - 1)]; init=0)
+                            sub.ops["hamTB"][bra, ket] += (-1)^sum(st_list[(nkas_pos + 1):(nkbs_pos - 1)]; init=0)
                         end
                     end
                 end
@@ -365,17 +393,94 @@ function buildHamBase!(sub::Subspace, nMMHK::Int, modes::Int, k::Real, mu::Real,
         end
     end
 
-    # Add TB to the Hamiltonian (the apostrophe ' means the conjugate transpose)
-    sub.ops["hamTB+HK"] += sub.ops["hamTB"] + sub.ops["hamTB"]'
+    # Add the adjoint TB to the Hamiltonian (the apostrophe ' means the conjugate transpose)
+    sub.ops["hamTB"] += sub.ops["hamTB"]'
 end
+
+
+
+
+
+# ----- OBSERVABLES -----
+"""
+    thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, opcode::String, T::Real, make_positive::Bool = false)
+
+Compute the thermal average of an operator `opcode`.
+
+# Arguments
+- `fspace::Array{Subspace}`: The list with the subspaces.
+- `vecs::Array{Number}`: Array with `2^(modes)` eigenvectors.
+- `vals::Array{Number}`: Array with `2^(modes)` eigenvalues.
+
+The arrays `vecs` and `vals` are ordered in blocks of `fspace[i].dimension` elements, each relative to their `fspace[i]`.
+"""
+function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, opcode::String, T::Real, make_positive::Bool = false)
+
+    # Scaled energies
+    vals .-= min(vals...)
+
+    # Boltzmann exponential
+    # If T = 0 then if E = 0 the exponent is 1 and otherwise is zero
+    bbexp = T != 0 ? exp.(-vals ./ T) : vals .== 0
+
+    # Partition function
+    Z = sum(bbexp)
+
+    # Boltzmann exponential -> Boltzmann factor
+    bbexp ./= Z
+
+    # Compute average via a trace
+    result = 0
+    index = 1
+    for sub in fspace
+        # End of the eigenvectors in this subspace
+        newIndex = index + sub.dimension - 1
+        
+        # Choose operator
+        op = sub.ops[opcode]
+
+        # Average = < n | O | n > = O(i, j) n*(i) n(j)
+        # Then we multiply it by the weight exp(-En / T)
+        # Finally we take the trace by summing over all eigenstates n
+        for n in index:newIndex
+            average = 0
+            for j in 1:sub.dimension
+                for i in 1:sub.dimension
+                    # Debugging
+                    # println("$n, $i, $j $(vecs[n])")
+
+                    # Compute the average
+                    average += op[i, j] * vecs[n][i]' * vecs[n][j]
+                end
+            end
+            
+            # Compute the absolute value of the expectation value on each state
+            if make_positive
+                average = abs(average)
+            end
+
+            result += average * bbexp[n]
+
+        # Update index
+        index = newIndex + 1
+
+        end
+    end
+
+    return result
+end
+
+
 
 
 
 # ----- SOLVER -----
 """
-    Solve the mean-field Hamiltonian for `L` k-points for temperature `T` and chemical potential `mu`.
+    solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
 
-    Self-consistently compute Delta starting at `delta_start` with an error of `delta_eps`.
+Solve the mean-field Hamiltonian for `L` k-points for temperature `T` and chemical potential `mu`.
+
+Self-consistently compute Delta starting at `delta_start` with an error of `delta_eps`.
 """
 function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
 
@@ -385,8 +490,11 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
 
     # --- GET THE K-POINTS ---
 
-    # We have L/2 k-points in the interval (0, pi)
-    kk = collect(1:fld(L, 2)) .* pi ./ (fld(L, 2))
+    # We have L/2 k-points in the interval (0, pi / nMMHK)
+    kk = collect(1:fld(L, 2 * nMMHK)) .* pi ./ (fld(L, 2 * nMMHK))
+
+    # Compute actual number of k-points
+    Nk = length(kk)
 
 
     # --- SETUP FOCK SPACE ---
@@ -395,24 +503,26 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
     fspace = startSubs(modes)
 
     # Prepare their operators
-    fspace = [buildOpsSubs(spin, states, lookup, nMMHK, modes) for (spin, states, lookup) in fspace]
+    fspace = [buildOpsSubs(spin, states, lookup, nMMHK, modes, mu, U) for (spin, states, lookup) in fspace]
 
     # Debuging 
-    for item in fspace
-        println("$(item.spin) $(item.states)")
-        println(item.ops["nk_tk_ts"])
-        println("")
-    end
+    # for item in fspace
+    #     println("$(item.spin) $(item.states)")
+    #     println(item.ops["nk_tk_ts"])
+    #     println("")
+    # end
 
 
+
+    # Initialize the errors
+    delta_error = delta_eps + 1
 
     # No SC term in the Hamiltonian
     if g == 0
         delta_start = 0
+        delta_error = delta_eps - 1
     end
 
-    # Initialize the errors
-    delta_error = delta_eps + 1
 
 
     # --- SOLVE ---
@@ -428,21 +538,65 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
     # Problem: Each thread would have its own while loop.
 
 
+    # Outputs
+    n = 0
+
     # Compute until the error is smaller then the desired precision
-    while delta_error > delta_eps
+    keep_going = true
+    while keep_going
+        
+        # This is the last lap!
+        if delta_error < delta_eps
+            keep_going = false
+        end
 
         # [PAR] Start paralelization
         for k in kk
 
-            # Build the base Hamiltonian for this k
+            # Store the eigenvalues and eigenvectors
+            vecs = []
+            vals = []
+
+            # Solve the system in each subspace
             for sub in fspace
-                buildHamBase!(sub, nMMHK, modes, k, mu, U, delta_start)
+                # Build the Hamiltonian for this k in each subspace
+                buildHamTB!(sub, nMMHK, modes, k)
+                
+                # Overwrite the tight-binding matrix for efficiency
+                sub.ops["hamTB"] .+= sub.ops["hamMU"] .+ sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
+
+                # Solve it
+                sub_vals, sub_vecs = la.eigen(la.Hermitian(sub.ops["hamTB"]))
+
+                # Add these to the lists
+                push!(vecs, collect(eachcol(sub_vecs))...)
+                push!(vals, sub_vals...)
+            end
+
+            # This is the last lap, compute outputs
+            if !keep_going
+                nLocal = thermal_average(fspace, vecs, vals, "nk_tk_ts", T)
+            end
+
+            # # Compute delta
+            # delta_new += thermal_average(fspace, vecs, vals, "bk_tk", T)
+
+
+            # [ONE-THREAD] Add the local value to the global total
+            if !keep_going
+                n += nLocal
             end
         end
 
-        # [SYNC] Compute the order parameter, the error and the outputs
+        # delta_new *= -g / (2 * Nk)
+
         delta_error = 0
     end
+
+    # Normalize
+    n *= 1 / (2 * Nk)
+
+    return n
 end
 
 # ----- MAIN CODE -----
@@ -453,8 +607,8 @@ W = 4
 # Parameters
 nMMHK = 1       # MMHK number of mixed momenta
 L = 100
-mu = 1.0
-U = 1
+mu = 0
+U = 0
 g = 0
 T = 0
 
@@ -468,4 +622,7 @@ solve(nMMHK, modes, L, mu, U, g, T)
 
 
 
+# TODO:
+# Optimizations:
+# Compute only the upper/ lower half of the Hamiltonian, as that is all the Hermitian eigensolver needs
 
