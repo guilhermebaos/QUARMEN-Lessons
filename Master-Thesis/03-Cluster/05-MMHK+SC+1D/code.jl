@@ -1,6 +1,7 @@
 # Imports
 import Base
 import LinearAlgebra as la
+import HDF5 as hdf
 
 
 # ----- HELPER FUNCTIONS -----
@@ -241,11 +242,11 @@ end
 
 # ----- OPERATORS -----
 """
-    buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int, mu::Real, U::Real)
+    buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int)
     
 Build the operators of this subspace which are independent of k and of any order parameters.
 """
-function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int, mu::Real, U::Real)
+function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int)
     # Compute dimension
     dimension = length(states)
     
@@ -292,10 +293,10 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
 
 
         # Chemical Potential H = -μN
-        ops["hamMU"][ket, ket] = -mu * sum(st_list)
+        ops["hamMU"][ket, ket] = sum(st_list)
 
         # Hatugai-Kohmoto Interaction H = U n(k, α, ↑)n(k, α, ↓) (we use the fact that up and down spins are next to each other on the list)
-        ops["hamHK"][ket, ket] = U * sum(st_list[2*index - 1] * st_list[2*index] for index in 1:fld(modes, 2))
+        ops["hamHK"][ket, ket] = sum(st_list[2*index - 1] * st_list[2*index] for index in 1:fld(modes, 2))
 
 
         # Applying bk to this state for each alpha (st is the ket, we find the bra)
@@ -421,7 +422,7 @@ function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, op
 
     # Boltzmann exponential
     # If T = 0 then if E = 0 the exponent is 1 and otherwise is zero
-    bbexp = T != 0 ? exp.(-vals ./ T) : vals .== 0
+    bbexp = (T != 0) ? Float64.(exp.(-vals ./ T)) : Float64.(vals .== 0)
 
     # Partition function
     Z = sum(bbexp)
@@ -476,16 +477,20 @@ end
 
 # ----- SOLVER -----
 """
-    solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
+    solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
 
 Solve the mean-field Hamiltonian for `L` k-points for temperature `T` and chemical potential `mu`.
 
 Self-consistently compute Delta starting at `delta_start` with an error of `delta_eps`.
 """
-function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
+function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
 
     # TODO:
     # Change the kx > 0 into kx >= 0 and halve its statistical weight
+    
+    # --- Auxiliary variables ---
+    modes = 4 * nMMHK
+
 
 
     # --- GET THE K-POINTS ---
@@ -503,7 +508,7 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
     fspace = startSubs(modes)
 
     # Prepare their operators
-    fspace = [buildOpsSubs(spin, states, lookup, nMMHK, modes, mu, U) for (spin, states, lookup) in fspace]
+    fspace = [buildOpsSubs(spin, states, lookup, nMMHK, modes) for (spin, states, lookup) in fspace]
 
     # Debuging 
     # for item in fspace
@@ -563,7 +568,7 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
                 buildHamTB!(sub, nMMHK, modes, k)
                 
                 # Overwrite the tight-binding matrix for efficiency
-                sub.ops["hamTB"] .+= sub.ops["hamMU"] .+ sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
+                sub.ops["hamTB"] .+= -mu .* sub.ops["hamMU"] .+ U .* sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
 
                 # Solve it
                 sub_vals, sub_vecs = la.eigen(la.Hermitian(sub.ops["hamTB"]))
@@ -596,8 +601,68 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
     # Normalize
     n *= 1 / (2 * Nk)
 
-    return n
+    outputs = Dict(
+        "n" => n
+    )
+
+    return outputs
 end
+
+
+
+
+# ----- PARAMETER SWEEPS -----
+function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::String)
+    # Sweep the given parameter
+    ss = collect(range(sweep1["min"], sweep1["max"], length=sweep1["ste"]))
+    oo = []
+    for val1 in ss
+        # Set the given parameter to the value we are sweeping
+        params[sweep1["param"]] = val1
+
+        # Compute and get the output
+        output = solve(params["nMMHK"], params["L"], params["mu"], params["U"], params["g"], params["T"])
+
+        # Save the desired output parameter
+        push!(oo, output[out1])
+    end
+
+    # Plot title
+    title_str = replace("$(collect(key == sweep1["param"] ? "" : "$key = $value" for (key, value) in params))", r"[\"\[\],]" => "")
+    title_str = rstrip(title_str)
+    
+    file_str = replace(replace(title_str, " = " => ""), " " => "-") * ".h5"
+
+    # Save the data next to this file
+    save_path = joinpath(@__DIR__, "outputs", file_str)
+
+    # Convert arrays
+    ooTyped = Float64.(oo)
+
+    # Save the data
+    hdf.h5open(save_path, "w") do file
+        # Save outputs
+        hdf.write(file, "x_data", ss)
+        hdf.write(file, "y_data", ooTyped)
+        hdf.write(file, "out1", out1)
+        
+        # Save parameters
+        g_params = hdf.create_group(file, "params")
+        for (k, v) in params
+            hdf.write(g_params, k, v)
+        end
+        
+        # Save the sweep
+        g_sweep = hdf.create_group(file, "sweep1")
+        for (k, v) in sweep1
+            hdf.write(g_sweep, k, v)
+        end
+    end
+
+    return (ss, oo)
+end
+
+
 
 # ----- MAIN CODE -----
 
@@ -605,18 +670,26 @@ end
 W = 4
 
 # Parameters
-nMMHK = 1       # MMHK number of mixed momenta
-L = 100
-mu = 0
-U = 0
-g = 0
-T = 0
+params = Dict{String, Real}(
+    "nMMHK" => 1,
+    "L" => 100,
+    "mu" => 0,
+    "U" => 0,
+    "g" => 0,
+    "T" => 0.0
+)
 
-# Auxiliary Variables
-modes = 4 * nMMHK
+
+# Parameter Sweep
+sweep1 = Dict(
+    "param" => "mu",
+    "min" => -2,
+    "max" => +2,
+    "ste" => 100
+)
 
 
-solve(nMMHK, modes, L, mu, U, g, T)
+plot1D(params, sweep1, "n")
 
 
 
