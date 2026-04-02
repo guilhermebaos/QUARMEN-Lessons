@@ -119,7 +119,7 @@ function fock!(decimal::Int, modes::Int, output::Vector{Int})
 end
 
 
-# TODO: Replace fock with a non-allocating version using bit shifts
+# TODO: Replace fock! with a non-allocating version using bit shifts
 
 #=
 FOCK SPACE
@@ -155,7 +155,7 @@ end
 
 
 # ----- SUBSPACES -----
-struct propSubspace
+struct Subspace
     # Subspace quantum numbers
     spin::Int64
 
@@ -167,41 +167,20 @@ struct propSubspace
 
     # Lookup table for states
     lookup::Dict{Int64, Int64}
-end
 
-
-struct opsSubspace
-    # Subspace properties
-    prop::propSubspace
-
-    # Operator list
-    # Parameterization allows Int matrices for nk operators and Complex for the Hamiltonian
-    ops::Dict{String, Matrix{Int64}}
-end
-
-
-struct hamSubspace
-    # Subspace properties
-    prop::propSubspace
-
-    # Operator list
-    # Parameterization allows Int matrices for nk operators and Complex for the Hamiltonian
-    ops::Dict{String, Matrix{Int64}}
-
-    # Hamiltonian
-    ham::Matrix{ComplexF32}
+    # Operators
+    ops::Dict{String, Union{Matrix{Int64}, Matrix{ComplexF32}}}
 end
 
 
 # Print the subspace
-function Base.show(io::IO, sub::propSubspace)
+function Base.show(io::IO, sub::Subspace)
     print(io, "Space with S = $(sub.spin) contains $(length(sub.states)) states: $(sub.states).")
 end
 
 
-# Build all subspaces
-# We work with a temporary dict to build the spaces, so that they can be immutable
-function buildPropSubs(modes::Int)
+# Elementary properties of the subspaces
+function startSubs(modes::Int)
     # Dimension of the Fock space
     dim = 2^modes
 
@@ -235,7 +214,7 @@ function buildPropSubs(modes::Int)
     end
 
     # Build the subspaces
-    fspace = [propSubspace(spin, states, length(states), lookup) for (spin, states, lookup) in zip(fspace_ss, fspace_states, fspace_lookup)]
+    fspace = [(spin, states, lookup) for (spin, states, lookup) in zip(fspace_ss, fspace_states, fspace_lookup)]
 
     return fspace
 end
@@ -246,30 +225,33 @@ end
 
 
 # ----- OPERATORS -----
-function buildOpsSubs(sub::propSubspace, nMMHK::Int, modes::Int)
+function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int)
+    # Compute dimension
+    dimension = length(states)
+    
     # Create the operators
     ops = Dict{String, Matrix{Int64}}()
 
     # Empty operators
-    ops["nk_tk_ts"] = zeros(Int64, sub.dimension, sub.dimension)
+    ops["nk_tk_ts"] = zeros(Int64, dimension, dimension)
 
-    ops["nk_tk_up"] = zeros(Int64, sub.dimension, sub.dimension)
-    ops["nk_tk_dw"] = zeros(Int64, sub.dimension, sub.dimension)
+    ops["nk_tk_up"] = zeros(Int64, dimension, dimension)
+    ops["nk_tk_dw"] = zeros(Int64, dimension, dimension)
     
-    ops["nk_pk_ts"] = zeros(Int64, sub.dimension, sub.dimension)
-    ops["nk_mk_ts"] = zeros(Int64, sub.dimension, sub.dimension)
+    ops["nk_pk_ts"] = zeros(Int64, dimension, dimension)
+    ops["nk_mk_ts"] = zeros(Int64, dimension, dimension)
 
-    ops["tk"] = zeros(Int64, sub.dimension, sub.dimension)
+    ops["tk"] = zeros(Int64, dimension, dimension)
     
-    ops["bk_tk"] = zeros(Int64, sub.dimension, sub.dimension)
-    ops["fmk"] = zeros(Int64, sub.dimension, sub.dimension)
+    ops["bk_tk"] = zeros(Int64, dimension, dimension)
+    ops["fmk"] = zeros(Int64, dimension, dimension)
 
 
     # Fill in the operators
     st_list = fock(0, modes)
-    for st in sub.states
+    for st in states
         # Position of the state
-        ket = sub.lookup[st]
+        ket = lookup[st]
 
         # Binary decomposition, by mutating st_list
         fock!(st, modes, st_list)
@@ -295,7 +277,7 @@ function buildOpsSubs(sub::propSubspace, nMMHK::Int, modes::Int)
             pos_mk_ds = npos(1, alpha, 1, nMMHK)
             if (st_list[pos_pk_us] * st_list[pos_mk_ds]) != 0
                 # The bra is the state without those two particles
-                bra_pk = sub.lookup[st - 2^(modes - pos_pk_us) - 2^(modes - pos_mk_ds)]
+                bra_pk = lookup[st - 2^(modes - pos_pk_us) - 2^(modes - pos_mk_ds)]
 
                 # The phase is given by the states between the destroyed particles
                 ops["bk_tk"][bra_pk, ket] = (-1)^sum(st_list[(pos_pk_us + 1):(pos_mk_ds - 1)]; init=0)
@@ -307,7 +289,7 @@ function buildOpsSubs(sub::propSubspace, nMMHK::Int, modes::Int)
             pos_mk_us = npos(1, alpha, 0, nMMHK)
             if (st_list[pos_pk_ds] * st_list[pos_mk_us]) != 0
                 # The bra is the state without those two particles (the -1 is because Julia is 1-indexed)
-                bra_mk = sub.lookup[st - 2^(modes - pos_pk_ds) - 2^(modes - pos_mk_us)]
+                bra_mk = lookup[st - 2^(modes - pos_pk_ds) - 2^(modes - pos_mk_us)]
 
                 # The phase is given by the states between the destroyed particles
                 # The +1 is from the fact that now we destroy the -k first, which has to commute with the filled +k state
@@ -321,34 +303,38 @@ function buildOpsSubs(sub::propSubspace, nMMHK::Int, modes::Int)
     ops["fmk"] .= ops["nk_tk_up"] - ops["nk_tk_dw"]
 
     # Return the subspace
-    return opsSubspace(sub, ops)
+    return Subspace(spin, states, dimension, lookup, ops)
 end
 
 
 """
     Create the Hamiltonian, without any of the self-consistent parameters!
 """
-function buildHamSubs(sub::opsSubspace, nMMHK::Int, modes::Int, k::Real, U::Real, Delta::Number)
-    # Create the operators
-    ops = Dict{String, Matrix{ComplexF32}}()
+function buildHamBase!(sub::Subspace, nMMHK::Int, modes::Int, k::Real, mu::Real, U::Real, Delta::Number)
 
     # Empty Operators
-    ops["ham"] = zeros(ComplexF32, sub.prop.dimension, sub.prop.dimension)
-    ops["tb"] = zeros(ComplexF32, sub.prop.dimension, sub.prop.dimension)
+    sub.ops["hamTB+HK"] = zeros(ComplexF32, sub.dimension, sub.dimension)
+    sub.ops["hamTB"] = zeros(ComplexF32, sub.dimension, sub.dimension)
 
     # Fock 
     st_list = fock(0, modes)
-    for st in sub.prop.states
+    for st in sub.states
         # Position of the state
-        ket = sub.prop.lookup[st]
+        ket = sub.lookup[st]
 
         # Binary decomposition
         fock!(st, modes, st_list)
 
-        # Hatugai-Kohmoto Interaction U n(k, α, ↑)n(k, α, ↓) (we use the fact that up and down spins are next to each other on the list)
-        ops["ham"][ket, ket] += U * sum(st_list[2*index - 1] * st_list[2*index] for index in 1:fld(modes, 2))
 
-        # Tight-binding operator t(α, β)c†(k, α, σ)c(k, β, σ)
+        # Chemical Potential H = -μN
+        sub.ops["hamTB+HK"][ket, ket] += -mu * sum(st_list)
+
+
+        # Hatugai-Kohmoto Interaction H = U n(k, α, ↑)n(k, α, ↓) (we use the fact that up and down spins are next to each other on the list)
+        sub.ops["hamTB+HK"][ket, ket] += U * sum(st_list[2*index - 1] * st_list[2*index] for index in 1:fld(modes, 2))
+
+
+        # Tight-binding operator H = t(α, β)c†(k, α, σ)c(k, β, σ)
         for alpha in 1:nMMHK
 
             # Nearest-neighbor to the right
@@ -366,12 +352,12 @@ function buildHamSubs(sub::opsSubspace, nMMHK::Int, modes::Int, k::Real, U::Real
 
                     # Check if this state allows a particle to be created at alpha and destroyed at beta
                     if nkas == 0 && nkbs == 1
-                        bra = sub.prop.lookup[st + 2^(modes - nkas_pos) - 2^(modes - nkbs_pos)]
+                        bra = sub.lookup[st + 2^(modes - nkas_pos) - 2^(modes - nkbs_pos)]
                         
                         if alpha == nMMHK
-                            ops["tb"][bra, ket] = (-1)^sum(st_list[(nkbs_pos + 1):(nkas_pos - 1)]; init=0) * exp(im * k * (ksign == 0 ? 1 : -1))
+                            sub.ops["hamTB"][bra, ket] = (-1)^sum(st_list[(nkbs_pos + 1):(nkas_pos - 1)]; init=0) * exp(im * k * (ksign == 0 ? 1 : -1))
                         else
-                            ops["tb"][bra, ket] = (-1)^sum(st_list[(nkas_pos + 1):(nkbs_pos - 1)]; init=0)
+                            sub.ops["hamTB"][bra, ket] = (-1)^sum(st_list[(nkas_pos + 1):(nkbs_pos - 1)]; init=0)
                         end
                     end
                 end
@@ -380,10 +366,7 @@ function buildHamSubs(sub::opsSubspace, nMMHK::Int, modes::Int, k::Real, U::Real
     end
 
     # Add TB to the Hamiltonian (the apostrophe ' means the conjugate transpose)
-    ops["ham"] += ops["tb"] + ops["tb"]'
-
-    # Return the new subspace
-    return hamSubspace(sub.prop, sub.ops, ops["ham"])
+    sub.ops["hamTB+HK"] += sub.ops["hamTB"] + sub.ops["hamTB"]'
 end
 
 
@@ -409,26 +392,19 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
     # --- SETUP FOCK SPACE ---
 
     # Generate the spaces
-    fspace_prop = buildPropSubs(modes)
+    fspace = startSubs(modes)
 
     # Prepare their operators
-    fspace_ops = [buildOpsSubs(item, nMMHK, modes) for item in fspace_prop]
+    fspace = [buildOpsSubs(spin, states, lookup, nMMHK, modes) for (spin, states, lookup) in fspace]
 
     # Debuging 
-    for item in fspace_ops
-        println("$(item.prop.spin) $(item.prop.states)")
+    for item in fspace
+        println("$(item.spin) $(item.states)")
         println(item.ops["nk_tk_ts"])
         println("")
     end
 
-    # --- SOLVE ---
-    # We work as follows:
-    #   1. (Parallel) Solve the Hamiltonian at each k-point
-    #   2. (Sync) Compute the minimum energy accross k-points, for use in thermal averages
-    #   3. (Parallel) Compute expectation values for the various quantities
-    #   4. (Sync) Sum the results, update self-consistent parameters and repeat 1.
-    
-    # We will parallelize later, the content of the parenthesis are notes to self
+
 
     # No SC term in the Hamiltonian
     if g == 0
@@ -438,23 +414,33 @@ function solve(nMMHK::Int, modes::Int, L::Int, mu::Real, U::Real, g::Real, T::Re
     # Initialize the errors
     delta_error = delta_eps + 1
 
-    # We use a flag to do a last lap after converging
-    # This runs the calculation with the converged parameters
-    calc_final = false
-    while !calc_final
 
-        # Check if we are converged, if we are then this is the final calculation
-        if delta_error < delta_eps
-            calc_final = true
-        end
+    # --- SOLVE ---
+    # We work as follows:
+    #   1. (Parallel) Solve the Hamiltonian at each k-point
+    #   2. (Parallel) Compute the minimum energy at each k-points, for use in thermal averages
+    #   3. (Parallel) Compute expectation values for the various quantities
+    #   4. (Sync) Sum the results, update self-consistent parameters and repeat 1.
+    
+    # [PAR] We will parallelize later, the content of the parenthesis are notes to self
+    
+    # Idea: I can place the k-loop as the top-level loop so that we only have to compute the base Hamiltonian once
+    # Problem: Each thread would have its own while loop.
 
-        # TODO: Solve the Hamiltonian
+
+    # Compute until the error is smaller then the desired precision
+    while delta_error > delta_eps
+
+        # [PAR] Start paralelization
         for k in kk
-            for subOps in fspace_ops
-                subHam = buildHamSubs(subOps, nMMHK, modes, k, U, delta_start)
+
+            # Build the base Hamiltonian for this k
+            for sub in fspace
+                buildHamBase!(sub, nMMHK, modes, k, mu, U, delta_start)
             end
         end
 
+        # [SYNC] Compute the order parameter, the error and the outputs
         delta_error = 0
     end
 end
