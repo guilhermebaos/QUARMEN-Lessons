@@ -249,7 +249,7 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
     dimension = length(states)
     
     # Create the operators
-    ops = Dict{String, Union{Matrix{Int64}, Matrix{Float64}, Matrix{ComplexF32}}}()
+    ops = Dict{String, Matrix{Int64}}()
 
     # Empty operators
     ops["nk_tk_ts"] = zeros(Int64, dimension, dimension)
@@ -257,13 +257,14 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
     ops["nk_tk_up"] = zeros(Int64, dimension, dimension)
     ops["nk_tk_dw"] = zeros(Int64, dimension, dimension)
     
-    # ops["nk_pk_ts"] = zeros(Int64, dimension, dimension)
-    # ops["nk_mk_ts"] = zeros(Int64, dimension, dimension)
+    ops["nk_pk_ts"] = zeros(Int64, dimension, dimension)
+    ops["nk_mk_ts"] = zeros(Int64, dimension, dimension)
+
+    ops["tk"] = zeros(Int64, dimension, dimension)
     
     ops["bk_tk"] = zeros(Int64, dimension, dimension)
     ops["fmk"] = zeros(Int64, dimension, dimension)
     
-    ops["hamTB"] = zeros(ComplexF32, dimension, dimension)
     ops["hamHK"] = zeros(Int64, dimension, dimension)
     ops["hamMU"] = zeros(Int64, dimension, dimension)
 
@@ -285,8 +286,8 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
         ops["nk_tk_dw"][ket, ket] = sum(n * ((pos + 1) % 2) for (pos, n) in enumerate(st_list))
 
         # Number of particles at +k and -k
-        # ops["nk_pk_ts"][ket, ket] = sum(n * (pos <= modes / 2) for (pos, n) in enumerate(st_list))
-        # ops["nk_mk_ts"][ket, ket] = sum(n * (pos >  modes / 2) for (pos, n) in enumerate(st_list))
+        ops["nk_pk_ts"][ket, ket] = sum(n * (pos <= modes / 2) for (pos, n) in enumerate(st_list))
+        ops["nk_mk_ts"][ket, ket] = sum(n * (pos >  modes / 2) for (pos, n) in enumerate(st_list))
 
 
         # Chemical Potential H = -μN
@@ -343,14 +344,14 @@ Create the tight-binding term of the Hamiltonian.
 """
 function buildHamTB!(sub::Subspace, nMMHK::Int, modes::Int, k::Real)
 
+    # Empty Operator
+    sub.ops["hamTB"] = zeros(ComplexF32, sub.dimension, sub.dimension)
+
     # In this case the tight-binding term is just the usual dispersion
     if nMMHK == 1
         sub.ops["hamTB"] .= ComplexF32.(2 * cos(k) .* sub.ops["nk_tk_ts"])
         return
     end
-
-    # Empty Operator
-    sub.ops["hamTB"] .= ComplexF32.(0)
 
     # Fock 
     st_list = fock(0, modes)
@@ -582,7 +583,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
             end
 
             # Compute Delta
-            deltaLocal = thermal_average(fspace, vecs, vals, "bk_tk", T)
+            deltaLocal =  thermal_average(fspace, vecs, vals, "bk_tk", T)
 
             # This is the last lap, compute outputs
             if !keep_going
@@ -730,25 +731,88 @@ end
 
 ## ----- MAIN CODE -----
 
-for Urun in (0, 12), grun in (0, 3)
-    params = Dict{String, Real}(
-        "nMMHK" => 1,
-        "L" => 500,
-        "mu" => 0,
-        "U" => Urun,
-        "g" => grun,
-        "T" => 0.0,
-        "nTarget" => -1.0
-    )
+# Constants
+W = 4
 
-    sweep1 = Dict(
-        "param" => "n",
-        "save" => "n",
-        "min" => 0.02,
-        "max" => 1.98,
-        "ste" => 60,
-        "eps" => 0.001
-    )
+params = Dict{String, Real}(
+    "nMMHK" => 3,
+    "L" => 500,
+    "mu" => 0,
+    "U" => 0.0,
+    "g" => 0.0,
+    "T" => 0.0,
+    "nTarget" => -1.0
+)
 
-    @time plot1D(params, sweep1, true)
-end
+sweep1 = Dict(
+    "param" => "mu",
+    "save" => "mu",
+    "min" => -2 - params["U"] - params["g"],
+    "max" => +2 + params["U"] + params["g"],
+    "ste" => 40,
+    "eps" => 0.001
+)
+
+out = "Kxx"
+
+@time plot1D(params, sweep1, true)
+
+
+
+## ----- TESTING -----
+
+# --- Test the mu bissection ---
+
+# params = Dict{String, Real}(
+#     "nMMHK" => 1,
+#     "L" => 500,
+#     "mu" => 0,
+#     "U" => 0,
+#     "g" => 0,
+#     "T" => 0.0
+# )
+
+# sweep1 = Dict(
+#     "param" => "n",
+#     "min" => 0,
+#     "max" => 2,
+#     "ste" => 50,
+#     "eps" => 0.02
+# )
+
+# out = "n"
+
+# @time plot1D(params, sweep1, out)
+
+
+
+# --- TEST the n(mu) curve ---
+
+# params = Dict{String, Real}(
+#     "nMMHK" => 1,
+#     "L" => 500,
+#     "mu" => 0,
+#     "U" => 0,
+#     "g" => 0,
+#     "T" => 0.0
+# )
+
+# sweep1 = Dict(
+#     "param" => "mu",
+#     "min" => -2,
+#     "max" => +2,
+#     "ste" => 50
+# )
+
+# out = "n"
+
+# @time plot1D(params, sweep1, out)
+
+
+
+
+
+# TODO:
+# Optimizations:
+# Compute only the upper/ lower half of the Hamiltonian, as that is all the Hermitian eigensolver needs
+
