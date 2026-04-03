@@ -1,10 +1,10 @@
-# Imports
+## Imports
 import Base
 import LinearAlgebra as la
 import HDF5 as hdf
 
 
-# ----- HELPER FUNCTIONS -----
+### ----- HELPER FUNCTIONS -----
 """
     bissect(func, a, b, eps, maxI, mult)
 
@@ -23,7 +23,7 @@ Find a root of the function `func` within the interval `[a, b]` using the bisect
 ### Errors
 - `ArgumentError`: Thrown if no sign change is detected within the sub-interval or if `maxI` is exceeded.
 """
-function bissect(func::Function, a::Real, b::Real, eps::Real, maxI::Int, mult::Bool)::Real
+function bissect(func::Function, a::Real, b::Real, eps::Real, maxI::Int = 200, mult::Bool = false)::Real
 
     # Evaluate on the edges
     fa, fb = func(a), func(b)
@@ -117,11 +117,9 @@ function fock(decimal::Int, modes::Int)::Vector{Int}
 end
 
 function fock!(decimal::Int, modes::Int, output::Vector{Int})
-    output .= digits(decimal, base=2, pad=modes)[end:-1:1]
+    output .= ((decimal >> pos) % 2 for pos in (modes-1):-1:0)
 end
 
-
-# TODO: Replace fock! with a non-allocating version using bit shifts
 
 #=
 FOCK SPACE
@@ -162,7 +160,7 @@ end
 
 
 
-# ----- SUBSPACES -----
+## ----- SUBSPACES -----
 struct Subspace
     # Subspace quantum numbers
     spin::Int64
@@ -198,7 +196,7 @@ Compute the elementary properties of the subspaces.
 """
 function startSubs(modes::Int)
     # Dimension of the Fock space
-    dim = 2^modes
+    dim = 1 << modes
 
     # Possible spins
     fspace_ss = collect(-div(modes, 2):div(modes, 2))
@@ -240,7 +238,7 @@ end
 
 
 
-# ----- OPERATORS -----
+## ----- OPERATORS -----
 """
     buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int)
     
@@ -308,10 +306,11 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
             pos_mk_ds = npos(1, alpha, 1, nMMHK)
             if (st_list[pos_pk_us] * st_list[pos_mk_ds]) != 0
                 # The bra is the state without those two particles
-                bra_pk = lookup[st - 2^(modes - pos_pk_us) - 2^(modes - pos_mk_ds)]
+                bra_pk = lookup[st - 1 << (modes - pos_pk_us) - 1 << (modes - pos_mk_ds)]
 
                 # The phase is given by the states between the destroyed particles
-                ops["bk_tk"][bra_pk, ket] = (-1)^sum(st_list[(pos_pk_us + 1):(pos_mk_ds - 1)]; init=0)
+                # We use iseven(x) instead of (-1)^x
+                ops["bk_tk"][bra_pk, ket] = iseven(sum(st_list[(pos_pk_us + 1):(pos_mk_ds - 1)]; init=0)) ? 1 : -1
             end
 
             # Applying bk for -k
@@ -320,11 +319,11 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
             pos_mk_us = npos(1, alpha, 0, nMMHK)
             if (st_list[pos_pk_ds] * st_list[pos_mk_us]) != 0
                 # The bra is the state without those two particles (the -1 is because Julia is 1-indexed)
-                bra_mk = lookup[st - 2^(modes - pos_pk_ds) - 2^(modes - pos_mk_us)]
+                bra_mk = lookup[st - 1 << (modes - pos_pk_ds) - 1 << (modes - pos_mk_us)]
 
                 # The phase is given by the states between the destroyed particles
                 # The +1 is from the fact that now we destroy the -k first, which has to commute with the filled +k state
-                ops["bk_tk"][bra_mk, ket] = (-1)^(sum(st_list[(pos_pk_ds + 1):(pos_mk_us - 1)]; init=0) + 1)
+                ops["bk_tk"][bra_mk, ket] = iseven(sum(st_list[(pos_pk_ds + 1):(pos_mk_us - 1)]; init=0) + 1) ? 1 : -1
             end
         end
     end
@@ -350,7 +349,7 @@ function buildHamTB!(sub::Subspace, nMMHK::Int, modes::Int, k::Real)
 
     # In this case the tight-binding term is just the usual dispersion
     if nMMHK == 1
-        sub.ops["hamTB"] = 2 * cos(k) * sub.ops["nk_tk_ts"]
+        sub.ops["hamTB"] .= ComplexF32.(2 * cos(k) .* sub.ops["nk_tk_ts"])
         return
     end
 
@@ -381,12 +380,12 @@ function buildHamTB!(sub::Subspace, nMMHK::Int, modes::Int, k::Real)
 
                     # Check if this state allows a particle to be created at alpha and destroyed at beta
                     if nkas == 0 && nkbs == 1
-                        bra = sub.lookup[st + 2^(modes - nkas_pos) - 2^(modes - nkbs_pos)]
+                        bra = sub.lookup[st + 1 << (modes - nkas_pos) - 1 << (modes - nkbs_pos)]
                         
                         if alpha == nMMHK
-                            sub.ops["hamTB"][bra, ket] += (-1)^sum(st_list[(nkbs_pos + 1):(nkas_pos - 1)]; init=0) * exp(im * k * (ksign == 0 ? 1 : -1))
+                            sub.ops["hamTB"][bra, ket] += iseven(sum(st_list[(nkbs_pos + 1):(nkas_pos - 1)]; init=0) * exp(im * k * (ksign == 0 ? 1 : -1))) ? 1 : -1
                         else
-                            sub.ops["hamTB"][bra, ket] += (-1)^sum(st_list[(nkas_pos + 1):(nkbs_pos - 1)]; init=0)
+                            sub.ops["hamTB"][bra, ket] += iseven(sum(st_list[(nkas_pos + 1):(nkbs_pos - 1)]; init=0)) ? 1 : -1
                         end
                     end
                 end
@@ -402,7 +401,7 @@ end
 
 
 
-# ----- OBSERVABLES -----
+## ----- OBSERVABLES -----
 """
     thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, opcode::String, T::Real, make_positive::Bool = false)
 
@@ -418,11 +417,11 @@ The arrays `vecs` and `vals` are ordered in blocks of `fspace[i].dimension` elem
 function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, opcode::String, T::Real, make_positive::Bool = false)
 
     # Scaled energies
-    vals .-= min(vals...)
+    vals .-= minimum(vals)
 
     # Boltzmann exponential
     # If T = 0 then if E = 0 the exponent is 1 and otherwise is zero
-    bbexp = (T != 0) ? Float64.(exp.(-vals ./ T)) : Float64.(vals .== 0)
+    bbexp = (T != 0) ? Float64.(exp.(-vals ./ T)) : Float64.(isapprox.(vals, 0.0, atol=1e-14))
 
     # Partition function
     Z = sum(bbexp)
@@ -475,7 +474,7 @@ end
 
 
 
-# ----- SOLVER -----
+## ----- SOLVER -----
 """
     solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
 
@@ -545,6 +544,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
 
     # Outputs
     n = 0
+    Kxx = 0
 
     # Compute until the error is smaller then the desired precision
     keep_going = true
@@ -555,12 +555,12 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
             keep_going = false
         end
 
-        # [PAR] Start paralelization
+        # [PAR] Start paralelization (each thread needs a deepcopy of fspace)
         for k in kk
 
             # Store the eigenvalues and eigenvectors
-            vecs = []
-            vals = []
+            vecs = Vector{Vector{ComplexF32}}()
+            vals = Vector{Float64}()
 
             # Solve the system in each subspace
             for sub in fspace
@@ -580,7 +580,8 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
 
             # This is the last lap, compute outputs
             if !keep_going
-                nLocal = thermal_average(fspace, vecs, vals, "nk_tk_ts", T)
+                nLocal = real(thermal_average(fspace, vecs, vals, "nk_tk_ts", T))
+                KxxLocal = real(thermal_average(fspace, vecs, vals, "hamTB", T))
             end
 
             # # Compute delta
@@ -590,6 +591,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
             # [ONE-THREAD] Add the local value to the global total
             if !keep_going
                 n += nLocal
+                Kxx += KxxLocal
             end
         end
 
@@ -599,10 +601,12 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
     end
 
     # Normalize
-    n *= 1 / (2 * Nk)
+    n *= 1 / (2 * Nk * nMMHK)
+    Kxx *= -pi / (2 * Nk * nMMHK)
 
     outputs = Dict(
-        "n" => n
+        "n" => n,
+        "Kxx" => Kxx
     )
 
     return outputs
@@ -611,14 +615,29 @@ end
 
 
 
-# ----- PARAMETER SWEEPS -----
+## ----- PARAMETER SWEEPS -----
 function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::String)
     # Sweep the given parameter
     ss = collect(range(sweep1["min"], sweep1["max"], length=sweep1["ste"]))
     oo = []
     for val1 in ss
-        # Set the given parameter to the value we are sweeping
-        params[sweep1["param"]] = val1
+
+        # If are sweeping the filling or there is a specific filling to achieve, we need to converge for mu
+        if (sweep1["param"] == "n") || (params["nTarget"] >= 0)
+            # Estimate minimum and maximum values from bandwith
+            mu_min = -2.2
+            mu_max = +2.2 + params["U"] + params["g"]
+            mu_eps = sweep1["eps"]
+
+            # Bissect for mu
+            mu = bissect(mu -> solve(params["nMMHK"], params["L"], mu, params["U"], params["g"], params["T"])["n"] - (sweep1["param"] == "n" ? val1 : params["nTarget"]), mu_min, mu_max, mu_eps)
+
+            # Update mu
+            params["mu"] = mu
+        else
+            # Set the given parameter to the value we are sweeping
+            params[sweep1["param"]] = val1
+        end
 
         # Compute and get the output
         output = solve(params["nMMHK"], params["L"], params["mu"], params["U"], params["g"], params["T"])
@@ -627,11 +646,17 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::Str
         push!(oo, output[out1])
     end
 
+    # Start of the title
+    title_start = out1 * "-vs-" * sweep1["param"] * "-"
+
     # Plot title
-    title_str = replace("$(collect(key == sweep1["param"] ? "" : "$key = $value" for (key, value) in params))", r"[\"\[\],]" => "")
-    title_str = rstrip(title_str)
-    
-    file_str = replace(replace(title_str, " = " => ""), " " => "-") * ".h5"
+    title_str = replace(
+        "$(collect((key == sweep1["param"]) || (key == "mu") || (key == "nTarget")  ? "" : "$key = $value" for (key, value) in params))"
+        * (params["nTarget"] >= 0 ? "n = $(params["nTarget"])" : "") , r"[\"\[\],]" => ""
+    )
+    title_str = title_start * rstrip(title_str)
+
+    file_str = replace(replace(replace(title_str, " = " => ""), " " => "-"), "--" => "-") * ".h5"
 
     # Create outputs folder
     mkpath(joinpath(@__DIR__, "outputs"))
@@ -644,7 +669,7 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::Str
 
     # Save the data
     hdf.h5open(save_path, "w") do file
-        
+
         # Save outputs
         hdf.write(file, "x_data", ss)
         hdf.write(file, "y_data", ooTyped)
@@ -668,32 +693,83 @@ end
 
 
 
-# ----- MAIN CODE -----
+## ----- MAIN CODE -----
 
 # Constants
 W = 4
 
-# Parameters
 params = Dict{String, Real}(
     "nMMHK" => 1,
     "L" => 500,
     "mu" => 0,
     "U" => 0,
     "g" => 0,
-    "T" => 0.0
+    "T" => 0.0,
+    "nTarget" => -1.0
 )
 
-
-# Parameter Sweep
 sweep1 = Dict(
-    "param" => "mu",
-    "min" => -2,
-    "max" => +2,
-    "ste" => 50
+    "param" => "n",
+    "min" => 0,
+    "max" => 2,
+    "ste" => 50,
+    "eps" => 0.02
 )
 
+out = "Kxx"
 
-@time plot1D(params, sweep1, "n")
+@time plot1D(params, sweep1, out)
+
+
+
+## ----- TESTING -----
+
+# --- Test the mu bissection ---
+
+# params = Dict{String, Real}(
+#     "nMMHK" => 1,
+#     "L" => 500,
+#     "mu" => 0,
+#     "U" => 0,
+#     "g" => 0,
+#     "T" => 0.0
+# )
+
+# sweep1 = Dict(
+#     "param" => "n",
+#     "min" => 0,
+#     "max" => 2,
+#     "ste" => 50,
+#     "eps" => 0.02
+# )
+
+# out = "n"
+
+# @time plot1D(params, sweep1, out)
+
+
+
+# --- TEST the n(mu) curve ---
+
+# params = Dict{String, Real}(
+#     "nMMHK" => 1,
+#     "L" => 500,
+#     "mu" => 0,
+#     "U" => 0,
+#     "g" => 0,
+#     "T" => 0.0
+# )
+
+# sweep1 = Dict(
+#     "param" => "mu",
+#     "min" => -2,
+#     "max" => +2,
+#     "ste" => 50
+# )
+
+# out = "n"
+
+# @time plot1D(params, sweep1, out)
 
 
 
