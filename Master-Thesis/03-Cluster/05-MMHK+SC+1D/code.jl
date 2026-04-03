@@ -417,11 +417,11 @@ The arrays `vecs` and `vals` are ordered in blocks of `fspace[i].dimension` elem
 function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, opcode::String, T::Real, make_positive::Bool = false)
 
     # Scaled energies
-    vals .-= minimum(vals)
+    mini = minimum(vals)
 
     # Boltzmann exponential
     # If T = 0 then if E = 0 the exponent is 1 and otherwise is zero
-    bbexp = (T != 0) ? Float64.(exp.(-vals ./ T)) : Float64.(isapprox.(vals, 0.0, atol=1e-14))
+    bbexp = (T != 0) ? Float64.(exp.(-(vals .- mini) ./ T)) : Float64.(isapprox.((vals .- mini), 0.0, atol=1e-14))
 
     # Partition function
     Z = sum(bbexp)
@@ -545,6 +545,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
     # Outputs
     n = 0
     Kxx = 0
+    delta = 0
 
     # Compute until the error is smaller then the desired precision
     keep_going = true
@@ -554,6 +555,9 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
         if delta_error < delta_eps
             keep_going = false
         end
+
+        # Multi-thread variable for the order paramter
+        delta_new = 0
 
         # [PAR] Start paralelization (each thread needs a deepcopy of fspace)
         for k in kk
@@ -566,7 +570,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
             for sub in fspace
                 # Build the Hamiltonian for this k in each subspace
                 buildHamTB!(sub, nMMHK, modes, k)
-                
+
                 # Overwrite the tight-binding matrix for efficiency
                 sub.ops["hamTB"] .+= -mu .* sub.ops["hamMU"] .+ U .* sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
 
@@ -578,26 +582,34 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
                 push!(vals, sub_vals...)
             end
 
+            # Compute Delta
+            deltaLocal =  thermal_average(fspace, vecs, vals, "bk_tk", T)
+
             # This is the last lap, compute outputs
             if !keep_going
                 nLocal = real(thermal_average(fspace, vecs, vals, "nk_tk_ts", T))
+
+                # Get the pure kinetic Hamiltonian
+                for sub in fspace
+                    buildHamTB!(sub, nMMHK, modes, k)
+                end
+
                 KxxLocal = real(thermal_average(fspace, vecs, vals, "hamTB", T))
             end
 
-            # # Compute delta
-            # delta_new += thermal_average(fspace, vecs, vals, "bk_tk", T)
-
 
             # [ONE-THREAD] Add the local value to the global total
+            delta_new += deltaLocal
             if !keep_going
                 n += nLocal
                 Kxx += KxxLocal
             end
         end
 
-        # delta_new *= -g / (2 * Nk)
-
-        delta_error = 0
+        # Compute error and next iteration
+        delta_new *= -g / (2 * Nk * nMMHK)
+        delta_error = abs(delta_new - delta_start)
+        delta_start = calpha * delta_new + (1 - calpha) * delta_start
     end
 
     # Normalize
@@ -606,7 +618,8 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
 
     outputs = Dict(
         "n" => n,
-        "Kxx" => Kxx
+        "Kxx" => Kxx,
+        "Delta" => delta_start
     )
 
     return outputs
@@ -616,16 +629,30 @@ end
 
 
 ## ----- PARAMETER SWEEPS -----
-function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::String)
+function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::String, progress::Bool = false)
     # Sweep the given parameter
     ss = collect(range(sweep1["min"], sweep1["max"], length=sweep1["ste"]))
-    oo = []
-    for val1 in ss
+
+    # Data to put on x and y axis
+    xx = []
+    yy = []
+
+    # Warning that we have a target filling
+    if params["nTarget"] >= 0
+        println("Going for target filling n = $(params["nTarget"])")
+    end
+
+    for (prog1, val1) in enumerate(ss)
+
+        if progress
+            print("\rCurrent iteration: $prog1 / $(length(ss))")
+            flush(stdout)
+        end
 
         # If are sweeping the filling or there is a specific filling to achieve, we need to converge for mu
         if (sweep1["param"] == "n") || (params["nTarget"] >= 0)
             # Estimate minimum and maximum values from bandwith
-            mu_min = -2.2
+            mu_min = -2.2 - params["g"]
             mu_max = +2.2 + params["U"] + params["g"]
             mu_eps = sweep1["eps"]
 
@@ -642,8 +669,15 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::Str
         # Compute and get the output
         output = solve(params["nMMHK"], params["L"], params["mu"], params["U"], params["g"], params["T"])
 
+        # Save the desired input paramter
+        if sweep1["save"] != sweep1["param"]
+            push!(xx, output[sweep1["save"]])
+        else
+            push!(xx, val1)
+        end
+
         # Save the desired output parameter
-        push!(oo, output[out1])
+        push!(yy, output[out1])
     end
 
     # Start of the title
@@ -665,14 +699,15 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::Str
     save_path = joinpath(@__DIR__, "outputs", file_str)
 
     # Convert arrays
-    ooTyped = Float64.(oo)
+    xxTyped = Float64.(xx)
+    yyTyped = Float64.(yy)
 
     # Save the data
     hdf.h5open(save_path, "w") do file
 
         # Save outputs
-        hdf.write(file, "x_data", ss)
-        hdf.write(file, "y_data", ooTyped)
+        hdf.write(file, "x_data", xxTyped)
+        hdf.write(file, "y_data", yyTyped)
         hdf.write(file, "out1", out1)
         
         # Save parameters
@@ -688,7 +723,7 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, out1::Str
         end
     end
 
-    return (ss, oo)
+    return (xx, yy)
 end
 
 
@@ -699,26 +734,27 @@ end
 W = 4
 
 params = Dict{String, Real}(
-    "nMMHK" => 1,
-    "L" => 500,
+    "nMMHK" => 2,
+    "L" => 1000,
     "mu" => 0,
-    "U" => 0,
-    "g" => 0,
+    "U" => 0.0,
+    "g" => 0.0,
     "T" => 0.0,
     "nTarget" => -1.0
 )
 
 sweep1 = Dict(
-    "param" => "n",
-    "min" => 0,
-    "max" => 2,
+    "param" => "mu",
+    "save" => "mu",
+    "min" => -2 - params["U"] - params["g"],
+    "max" => +2 + params["U"] + params["g"],
     "ste" => 50,
-    "eps" => 0.02
+    "eps" => 0.001
 )
 
-out = "Kxx"
+out = "n"
 
-@time plot1D(params, sweep1, out)
+@time plot1D(params, sweep1, out, true)
 
 
 
