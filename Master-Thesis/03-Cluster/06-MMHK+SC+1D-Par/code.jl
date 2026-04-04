@@ -414,12 +414,14 @@ Compute the thermal average of an operator `opcode`.
 
 The arrays `vecs` and `vals` are ordered in blocks of `fspace[i].dimension` elements, each relative to their `fspace[i]`.
 """
-function thermal_average(fspace::Array{Subspace}, opcode::String, T::Real, make_positive::Bool = false)
+function thermal_average(fspace::Array{Subspace}, opcode::String, T::Real, vals::Vector{Float64}, make_positive::Bool = false)
 
     # Join all the eigenvalues
-    vals = Float64[]
+    index = 1
     for sub in fspace
-        push!(vals, sub.vals...)
+        newIndex = index + sub.dimension - 1
+        vals[index:newIndex] = sub.vals
+        index = newIndex + 1
     end
 
     # Scaled energies
@@ -427,8 +429,8 @@ function thermal_average(fspace::Array{Subspace}, opcode::String, T::Real, make_
 
     # Boltzmann exponential
     # If T = 0 then if E = 0 the exponent is 1 and otherwise is zero
-    bbexp = (T != 0) ? Float64.(exp.(-(vals .- mini) ./ T)) : Float64.(isapprox.((vals .- mini), 0.0, atol=1e-14))
-
+    bbexp = isapprox(T, 0.0, atol=1e-14) ? Float64.(isapprox.((vals .- mini), 0.0, atol=1e-14)) : exp.(-(vals .- mini) ./ T)
+    
     # Partition function
     Z = sum(bbexp)
 
@@ -449,12 +451,14 @@ function thermal_average(fspace::Array{Subspace}, opcode::String, T::Real, make_
         for n in 1:sub.dimension 
             average = 0
             for j in 1:sub.dimension
+                v_jn = sub.vecs[j, n]
+
                 for i in 1:sub.dimension
                     # Debugging
                     # println("$n, $i, $j $(vecs[n])")
 
                     # Compute the average
-                    average += op[i, j] * sub.vecs[i, n]' * sub.vecs[j, n]
+                    average += op[i, j] * sub.vecs[i, n]' * v_jn
                 end
             end
             
@@ -562,6 +566,9 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
         # [PAR] Start paralelization (each thread needs a deepcopy of fspace)
         for k in kk
 
+            # Setup array to hold all eigenvalues (via thermal_average)
+            valsOverwrite = Vector{Float64}(undef, 2^modes)
+
             # Solve the system in each subspace
             for sub in fspace
 
@@ -572,24 +579,24 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
                 sub.ops["hamTB"] .+= -mu .* sub.ops["hamMU"] .+ U .* sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
 
                 # Solve it
-                eigensolved = la.eigen(la.Hermitian(sub.ops["hamTB"]))
+                eigensolved = la.eigen!(la.Hermitian(sub.ops["hamTB"]))
                 sub.vals .= eigensolved.values
                 sub.vecs .= eigensolved.vectors
             end
 
             # Compute Delta
-            deltaLocal = thermal_average(fspace, "bk_tk", T)
+            deltaLocal = thermal_average(fspace, "bk_tk", T, valsOverwrite)
 
             # This is the last lap, compute outputs
             if !keep_going
-                nLocal = real(thermal_average(fspace, "nk_tk_ts", T))
+                nLocal = real(thermal_average(fspace, "nk_tk_ts", T, valsOverwrite))
 
                 # Get the pure kinetic Hamiltonian
                 for sub in fspace
                     buildHamTB!(sub, nMMHK, modes, k)
                 end
 
-                KxxLocal = real(thermal_average(fspace, "hamTB", T))
+                KxxLocal = real(thermal_average(fspace, "hamTB", T, valsOverwrite))
             end
 
 
@@ -727,11 +734,11 @@ end
 ## ----- MAIN CODE -----
 
 params = Dict{String, Real}(
-    "nMMHK" => 2,
-    "L" => 500,
+    "nMMHK" => 1,
+    "L" => 1000,
     "mu" => 0,
     "U" => 0,
-    "g" => 0,
+    "g" => 0.3,
     "T" => 0.0,
     "nTarget" => -1.0
 )
