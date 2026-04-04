@@ -88,16 +88,6 @@ end
 
 
 """
-    disp(kk::AbstractArray)
-
-Compute the dispersion relation for a given set of vectors `kk` which are *in 1D*.
-"""
-function disp(kk::AbstractArray)
-    return -2 * cos.(kk)
-end
-
-
-"""
     fock(decimal::Int, modes::Int=8)
 
 Convert a decimal integer into a binary vector corresponding to its Fock state representation.
@@ -175,7 +165,14 @@ struct Subspace
     lookup::Dict{Int64, Int64}
 
     # Operators
-    ops::Dict{String, Union{Matrix{Int64}, Matrix{Float64}, Matrix{ComplexF32}}}
+    # We make them all be complex because we eventually want complex multiplications
+    ops::Dict{String, Matrix{ComplexF64}}
+
+    # Eigenvalues
+    vals::Vector{Float64}
+
+    # Eigenvectors
+    vecs::Matrix{ComplexF64}
 end
 
 
@@ -249,23 +246,23 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
     dimension = length(states)
     
     # Create the operators
-    ops = Dict{String, Union{Matrix{Int64}, Matrix{Float64}, Matrix{ComplexF32}}}()
+    ops = Dict{String, Matrix{ComplexF64}}()
 
     # Empty operators
-    ops["nk_tk_ts"] = zeros(Int64, dimension, dimension)
+    ops["nk_tk_ts"] = zeros(ComplexF64, dimension, dimension)
 
-    ops["nk_tk_up"] = zeros(Int64, dimension, dimension)
-    ops["nk_tk_dw"] = zeros(Int64, dimension, dimension)
+    ops["nk_tk_up"] = zeros(ComplexF64, dimension, dimension)
+    ops["nk_tk_dw"] = zeros(ComplexF64, dimension, dimension)
     
     # ops["nk_pk_ts"] = zeros(Int64, dimension, dimension)
     # ops["nk_mk_ts"] = zeros(Int64, dimension, dimension)
     
-    ops["bk_tk"] = zeros(Int64, dimension, dimension)
-    ops["fmk"] = zeros(Int64, dimension, dimension)
+    ops["bk_tk"] = zeros(ComplexF64, dimension, dimension)
+    ops["fmk"] = zeros(ComplexF64, dimension, dimension)
     
-    ops["hamTB"] = zeros(ComplexF32, dimension, dimension)
-    ops["hamHK"] = zeros(Int64, dimension, dimension)
-    ops["hamMU"] = zeros(Int64, dimension, dimension)
+    ops["hamTB"] = zeros(ComplexF64, dimension, dimension)
+    ops["hamHK"] = zeros(ComplexF64, dimension, dimension)
+    ops["hamMU"] = zeros(ComplexF64, dimension, dimension)
 
 
     # Fill in the operators
@@ -331,8 +328,12 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
     # TODO: Make magnetization per orbital
     ops["fmk"] .= ops["nk_tk_up"] - ops["nk_tk_dw"]
 
+    # Create empty arrays for vals and vecs
+    vals = Vector{Float64}(undef, dimension)
+    vecs = Matrix{ComplexF64}(undef, dimension, dimension)
+
     # Return the subspace
-    return Subspace(spin, states, dimension, lookup, ops)
+    return Subspace(spin, states, dimension, lookup, ops, vals, vecs)
 end
 
 
@@ -345,12 +346,12 @@ function buildHamTB!(sub::Subspace, nMMHK::Int, modes::Int, k::Real)
 
     # In this case the tight-binding term is just the usual dispersion
     if nMMHK == 1
-        sub.ops["hamTB"] .= ComplexF32.(2 * cos(k) .* sub.ops["nk_tk_ts"])
+        sub.ops["hamTB"] .= ComplexF64.(2 * cos(k) .* sub.ops["nk_tk_ts"])
         return
     end
 
     # Empty Operator
-    sub.ops["hamTB"] .= ComplexF32.(0)
+    sub.ops["hamTB"] .= ComplexF64.(0)
 
     # Fock 
     st_list = fock(0, modes)
@@ -393,7 +394,7 @@ function buildHamTB!(sub::Subspace, nMMHK::Int, modes::Int, k::Real)
     end
 
     # Add the adjoint TB to the Hamiltonian (the apostrophe ' means the conjugate transpose)
-    sub.ops["hamTB"] += sub.ops["hamTB"]'
+    sub.ops["hamTB"] .= sub.ops["hamTB"] .+ sub.ops["hamTB"]'
 end
 
 
@@ -402,7 +403,7 @@ end
 
 ## ----- OBSERVABLES -----
 """
-    thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, opcode::String, T::Real, make_positive::Bool = false)
+    thermal_average(fspace::Array{Subspace}, opcode::String, T::Real, make_positive::Bool = false)
 
 Compute the thermal average of an operator `opcode`.
 
@@ -413,7 +414,13 @@ Compute the thermal average of an operator `opcode`.
 
 The arrays `vecs` and `vals` are ordered in blocks of `fspace[i].dimension` elements, each relative to their `fspace[i]`.
 """
-function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, opcode::String, T::Real, make_positive::Bool = false)
+function thermal_average(fspace::Array{Subspace}, opcode::String, T::Real, make_positive::Bool = false)
+
+    # Join all the eigenvalues
+    vals = Float64[]
+    for sub in fspace
+        push!(vals, sub.vals...)
+    end
 
     # Scaled energies
     mini = minimum(vals)
@@ -430,10 +437,8 @@ function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, op
 
     # Compute average via a trace
     result = 0
-    index = 1
+    vecnum = 1
     for sub in fspace
-        # End of the eigenvectors in this subspace
-        newIndex = index + sub.dimension - 1
         
         # Choose operator
         op = sub.ops[opcode]
@@ -441,7 +446,7 @@ function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, op
         # Average = < n | O | n > = O(i, j) n*(i) n(j)
         # Then we multiply it by the weight exp(-En / T)
         # Finally we take the trace by summing over all eigenstates n
-        for n in index:newIndex
+        for n in 1:sub.dimension 
             average = 0
             for j in 1:sub.dimension
                 for i in 1:sub.dimension
@@ -449,7 +454,7 @@ function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, op
                     # println("$n, $i, $j $(vecs[n])")
 
                     # Compute the average
-                    average += op[i, j] * vecs[n][i]' * vecs[n][j]
+                    average += op[i, j] * sub.vecs[i, n]' * sub.vecs[j, n]
                 end
             end
             
@@ -458,11 +463,8 @@ function thermal_average(fspace::Array{Subspace}, vecs::Vector, vals::Vector, op
                 average = abs(average)
             end
 
-            result += average * bbexp[n]
-
-        # Update index
-        index = newIndex + 1
-
+            result += average * bbexp[vecnum]
+            vecnum += 1
         end
     end
 
@@ -481,7 +483,7 @@ Solve the mean-field Hamiltonian for `L` k-points for temperature `T` and chemic
 
 Self-consistently compute Delta starting at `delta_start` with an error of `delta_eps`.
 """
-function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::Real = 1e-2, delta_eps::Real = 1e-4, calpha::Real = 0.8)
+function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_start::ComplexF64 = 1e-2 + 0 * im, delta_eps::Real = 1e-4, calpha::Real = 0.8)
 
     # TODO:
     # Change the kx > 0 into kx >= 0 and halve its statistical weight
@@ -544,7 +546,6 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
     # Outputs
     n = 0
     Kxx = 0
-    delta = 0
 
     # Compute until the error is smaller then the desired precision
     keep_going = true
@@ -561,12 +562,9 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
         # [PAR] Start paralelization (each thread needs a deepcopy of fspace)
         for k in kk
 
-            # Store the eigenvalues and eigenvectors
-            vecs = Vector{Vector{ComplexF32}}()
-            vals = Vector{Float64}()
-
             # Solve the system in each subspace
             for sub in fspace
+
                 # Build the Hamiltonian for this k in each subspace
                 buildHamTB!(sub, nMMHK, modes, k)
 
@@ -574,26 +572,24 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
                 sub.ops["hamTB"] .+= -mu .* sub.ops["hamMU"] .+ U .* sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
 
                 # Solve it
-                sub_vals, sub_vecs = la.eigen(la.Hermitian(sub.ops["hamTB"]))
-
-                # Add these to the lists
-                push!(vecs, collect(eachcol(sub_vecs))...)
-                push!(vals, sub_vals...)
+                eigensolved = la.eigen(la.Hermitian(sub.ops["hamTB"]))
+                sub.vals .= eigensolved.values
+                sub.vecs .= eigensolved.vectors
             end
 
             # Compute Delta
-            deltaLocal = thermal_average(fspace, vecs, vals, "bk_tk", T)
+            deltaLocal = thermal_average(fspace, "bk_tk", T)
 
             # This is the last lap, compute outputs
             if !keep_going
-                nLocal = real(thermal_average(fspace, vecs, vals, "nk_tk_ts", T))
+                nLocal = real(thermal_average(fspace, "nk_tk_ts", T))
 
                 # Get the pure kinetic Hamiltonian
                 for sub in fspace
                     buildHamTB!(sub, nMMHK, modes, k)
                 end
 
-                KxxLocal = real(thermal_average(fspace, vecs, vals, "hamTB", T))
+                KxxLocal = real(thermal_average(fspace, "hamTB", T))
             end
 
 
@@ -730,25 +726,23 @@ end
 
 ## ----- MAIN CODE -----
 
-for Urun in (0, 12), grun in (0, 3)
-    params = Dict{String, Real}(
-        "nMMHK" => 1,
-        "L" => 500,
-        "mu" => 0,
-        "U" => Urun,
-        "g" => grun,
-        "T" => 0.0,
-        "nTarget" => -1.0
-    )
+params = Dict{String, Real}(
+    "nMMHK" => 2,
+    "L" => 500,
+    "mu" => 0,
+    "U" => 0,
+    "g" => 0,
+    "T" => 0.0,
+    "nTarget" => -1.0
+)
 
-    sweep1 = Dict(
-        "param" => "n",
-        "save" => "n",
-        "min" => 0.02,
-        "max" => 1.98,
-        "ste" => 60,
-        "eps" => 0.001
-    )
+sweep1 = Dict(
+    "param" => "mu",
+    "save" => "mu",
+    "min" => -2 - params["U"] - params["g"],
+    "max" => +2 + params["U"] + params["g"],
+    "ste" => 20,
+    "eps" => 0.001
+)
 
-    @time plot1D(params, sweep1, true)
-end
+@time plot1D(params, sweep1, true)
