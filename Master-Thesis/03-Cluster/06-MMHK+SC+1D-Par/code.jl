@@ -6,7 +6,6 @@ import HDF5 as hdf
 # Parallelization
 using Base.Threads
 
-
 ### ----- HELPER FUNCTIONS -----
 """
     bissect(func, a, b, eps, maxI, mult)
@@ -244,7 +243,7 @@ end
     
 Build the operators of this subspace which are independent of k and of any order parameters.
 """
-function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int)
+function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nMMHK::Int, modes::Int, mu::Real, U::Real)
     # Compute dimension
     dimension = length(states)
     
@@ -290,10 +289,10 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
 
 
         # Chemical Potential H = -μN
-        ops["hamMU"][ket, ket] = sum(st_list)
+        ops["hamMU"][ket, ket] = -mu * sum(st_list)
 
         # Hatugai-Kohmoto Interaction H = U n(k, α, ↑)n(k, α, ↓) (we use the fact that up and down spins are next to each other on the list)
-        ops["hamHK"][ket, ket] = sum(st_list[2*index - 1] * st_list[2*index] for index in 1:(2*nMMHK))
+        ops["hamHK"][ket, ket] = U * sum(st_list[2*index - 1] * st_list[2*index] for index in 1:(2*nMMHK))
 
 
         # Applying bk to this state for each alpha (st is the ket, we find the bra)
@@ -432,7 +431,16 @@ function thermal_average(fspace::Array{Subspace}, opcode::String, T::Real, vals:
 
     # Boltzmann exponential
     # If T = 0 then if E = 0 the exponent is 1 and otherwise is zero
-    bbexp = isapprox(T, 0.0, atol=1e-14) ? Float64.(isapprox.((vals .- mini), 0.0, atol=1e-14)) : exp.(-(vals .- mini) ./ T)
+    if isapprox(T, 0.0, atol=1e-14)
+        for i in eachindex(vals)
+            vals[i] = isapprox((vals[i] - mini), 0.0, atol=1e-14) ? 1.0 : 0.0
+        end
+    else
+        for i in eachindex(vals)
+            vals[i] = exp(-(vals[i] - mini) / T)
+        end
+    end
+    bbexp = vals
     
     # Partition function
     Z = sum(bbexp)
@@ -515,7 +523,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
     fspace = startSubs(modes)
 
     # Prepare their operators
-    fspace = [buildOpsSubs(spin, states, lookup, nMMHK, modes) for (spin, states, lookup) in fspace]
+    fspace = [buildOpsSubs(spin, states, lookup, nMMHK, modes, mu, U) for (spin, states, lookup) in fspace]
 
     # Debuging 
     # for item in fspace
@@ -543,19 +551,14 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
     #   2. (Parallel) Compute the minimum energy at each k-points, for use in thermal averages
     #   3. (Parallel) Compute expectation values for the various quantities
     #   4. (Sync) Sum the results, update self-consistent parameters and repeat 1.
-    
-    # [PAR] We will parallelize later, the content of the parenthesis are notes to self
-    
-    # Idea: I can place the k-loop as the top-level loop so that we only have to compute the base Hamiltonian once
-    # Problem: Each thread would have its own while loop.
-
 
     # Outputs
     n_atomic = Atomic{Float64}(0)
     Kxx_atomic = Atomic{Float64}(0)
 
-    # Setup the copy of the subspace which each thread is going to use
-    fspace_copies = [deepcopy(fspace) for _ in 1:Threads.maxthreadid()]
+    # Split the k-points in chunks, one for each thread
+    chunk_size = cld(Nk, Threads.nthreads())
+    chunks = collect(Iterators.partition(kk, chunk_size))
 
     # Compute until the error is smaller then the desired precision
     keep_going = true
@@ -572,44 +575,49 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
         delta_atomic_imag = Atomic{Float64}(0)
 
         # [PAR] Start paralelization (each thread needs a deepcopy of fspace)
-        @threads for k in kk
+        @threads for ch in chunks
 
-            # Use the local version of the Fock space
-            fspace_local = fspace_copies[Threads.threadid()]
-
-            # Setup array to hold all eigenvalues (via thermal_average)
+            # Copiying the needed data
+            fspace_local = deepcopy(fspace)
             valsOverwrite = Vector{Float64}(undef, 2^modes)
+            
+            # Accumulators
+            deltaLocal = 0.0 + 0.0im
+            nLocal = 0.0
+            KxxLocal = 0.0
+        
+            for k in ch
 
-            # Solve the system in each subspace
-            for sub in fspace_local
-
-                # Build the Hamiltonian for this k in each subspace
-                buildHamTB!(sub, nMMHK, modes, k)
-
-                # Overwrite the tight-binding matrix for efficiency
-                sub.ops["hamTB"] .+= -mu .* sub.ops["hamMU"] .+ U .* sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
-
-                # Solve it
-                eigensolved = la.eigen!(la.Hermitian(sub.ops["hamTB"]))
-                sub.vals .= eigensolved.values
-                sub.vecs .= eigensolved.vectors
-            end
-
-            # Compute Delta
-            deltaLocal = thermal_average(fspace_local, "bk_tk", T, valsOverwrite)
-
-            # This is the last lap, compute outputs
-            if !keep_going
-                nLocal = real(thermal_average(fspace_local, "nk_tk_ts", T, valsOverwrite))
-
-                # Get the pure kinetic Hamiltonian
+                # Solve the system in each subspace
                 for sub in fspace_local
+
+                    # Build the Hamiltonian for this k in each subspace
                     buildHamTB!(sub, nMMHK, modes, k)
+
+                    # Overwrite the tight-binding matrix for efficiency
+                    sub.ops["hamTB"] .+= sub.ops["hamMU"] .+ sub.ops["hamHK"] .+ (delta_start' .* sub.ops["bk_tk"] .+ delta_start .* sub.ops["bk_tk"]')
+
+                    # Solve it
+                    eigensolved = la.eigen!(la.Hermitian(sub.ops["hamTB"]))
+                    sub.vals .= eigensolved.values
+                    sub.vecs .= eigensolved.vectors
                 end
 
-                KxxLocal = real(thermal_average(fspace_local, "hamTB", T, valsOverwrite))
-            end
+                # Compute Delta
+                deltaLocal += thermal_average(fspace_local, "bk_tk", T, valsOverwrite)
 
+                # This is the last lap, compute outputs
+                if !keep_going
+                    nLocal += real(thermal_average(fspace_local, "nk_tk_ts", T, valsOverwrite))
+
+                    # Get the pure kinetic Hamiltonian
+                    for sub in fspace_local
+                        buildHamTB!(sub, nMMHK, modes, k)
+                    end
+
+                    KxxLocal += real(thermal_average(fspace_local, "hamTB", T, valsOverwrite))
+                end
+            end
 
             # [ONE-THREAD] Add the local value to the global total
             atomic_add!(delta_atomic_real, real(deltaLocal))
@@ -637,7 +645,8 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
     n *= 1 / (2 * Nk * nMMHK)
     Kxx *= -pi / (2 * Nk * nMMHK)
 
-    outputs = Dict{String, Union{Float64, ComplexF64}}(
+    outputs = Dict{String, Number}(
+        "Nk" => Nk, 
         "n" => n,
         "Kxx" => Kxx,
         "Delta" => delta_start
@@ -753,8 +762,8 @@ end
 ## ----- MAIN CODE -----
 
 params = Dict{String, Real}(
-    "nMMHK" => 1,
-    "L" => 1000,
+    "nMMHK" => 2,
+    "L" => 30000,
     "mu" => 0,
     "U" => 0,
     "g" => 0,
@@ -767,8 +776,8 @@ sweep1 = Dict(
     "save" => "mu",
     "min" => -2 - params["U"] - params["g"],
     "max" => +2 + params["U"] + params["g"],
-    "ste" => 20,
+    "ste" => 4,
     "eps" => 0.001
 )
 
-@time plot1D(params, sweep1, true)
+@time plot1D(params, sweep1, false)
