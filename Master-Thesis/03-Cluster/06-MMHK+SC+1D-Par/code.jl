@@ -3,6 +3,9 @@ import Base
 import LinearAlgebra as la
 import HDF5 as hdf
 
+# Parallelization
+using Base.Threads
+
 
 ### ----- HELPER FUNCTIONS -----
 """
@@ -548,8 +551,11 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
 
 
     # Outputs
-    n = 0
-    Kxx = 0
+    n_atomic = Atomic{Float64}(0)
+    Kxx_atomic = Atomic{Float64}(0)
+
+    # Setup the copy of the subspace which each thread is going to use
+    fspace_copies = [deepcopy(fspace) for _ in 1:Threads.maxthreadid()]
 
     # Compute until the error is smaller then the desired precision
     keep_going = true
@@ -561,16 +567,21 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
         end
 
         # Multi-thread variable for the order paramter
-        delta_new = 0
+        # Atomic opeartions are not defined for complex numbers, so we separate into real and imaginary parts
+        delta_atomic_real = Atomic{Float64}(0)
+        delta_atomic_imag = Atomic{Float64}(0)
 
         # [PAR] Start paralelization (each thread needs a deepcopy of fspace)
-        for k in kk
+        @threads for k in kk
+
+            # Use the local version of the Fock space
+            fspace_local = fspace_copies[Threads.threadid()]
 
             # Setup array to hold all eigenvalues (via thermal_average)
             valsOverwrite = Vector{Float64}(undef, 2^modes)
 
             # Solve the system in each subspace
-            for sub in fspace
+            for sub in fspace_local
 
                 # Build the Hamiltonian for this k in each subspace
                 buildHamTB!(sub, nMMHK, modes, k)
@@ -585,28 +596,32 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
             end
 
             # Compute Delta
-            deltaLocal = thermal_average(fspace, "bk_tk", T, valsOverwrite)
+            deltaLocal = thermal_average(fspace_local, "bk_tk", T, valsOverwrite)
 
             # This is the last lap, compute outputs
             if !keep_going
-                nLocal = real(thermal_average(fspace, "nk_tk_ts", T, valsOverwrite))
+                nLocal = real(thermal_average(fspace_local, "nk_tk_ts", T, valsOverwrite))
 
                 # Get the pure kinetic Hamiltonian
-                for sub in fspace
+                for sub in fspace_local
                     buildHamTB!(sub, nMMHK, modes, k)
                 end
 
-                KxxLocal = real(thermal_average(fspace, "hamTB", T, valsOverwrite))
+                KxxLocal = real(thermal_average(fspace_local, "hamTB", T, valsOverwrite))
             end
 
 
             # [ONE-THREAD] Add the local value to the global total
-            delta_new += deltaLocal
+            atomic_add!(delta_atomic_real, real(deltaLocal))
+            atomic_add!(delta_atomic_imag, imag(deltaLocal))
             if !keep_going
-                n += nLocal
-                Kxx += KxxLocal
+                atomic_add!(n_atomic, nLocal)
+                atomic_add!(Kxx_atomic, KxxLocal)
             end
         end
+
+        # Get complex delta_new
+        delta_new = delta_atomic_real[] + delta_atomic_imag[] * im
 
         # Compute error and next iteration
         delta_new *= -g / (2 * Nk * nMMHK)
@@ -614,11 +629,15 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
         delta_start = calpha * delta_new + (1 - calpha) * delta_start
     end
 
+    # Make the outputs non-atomic
+    n = n_atomic[]
+    Kxx = Kxx_atomic[]
+
     # Normalize
     n *= 1 / (2 * Nk * nMMHK)
     Kxx *= -pi / (2 * Nk * nMMHK)
 
-    outputs = Dict(
+    outputs = Dict{String, Union{Float64, ComplexF64}}(
         "n" => n,
         "Kxx" => Kxx,
         "Delta" => delta_start
@@ -738,7 +757,7 @@ params = Dict{String, Real}(
     "L" => 1000,
     "mu" => 0,
     "U" => 0,
-    "g" => 0.3,
+    "g" => 0,
     "T" => 0.0,
     "nTarget" => -1.0
 )
