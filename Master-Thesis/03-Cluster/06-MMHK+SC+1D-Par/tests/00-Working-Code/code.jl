@@ -724,9 +724,6 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, progress:
     # Save the data
     hdf.h5open(save_path, "w") do file
 
-        # Write the number of threads used
-        hdf.write(file, "nthreads", Threads.nthreads())
-
         # Save outputs
         hdf.write(file, "ss_data", ssTyped)
         
@@ -765,24 +762,22 @@ end
 ## ----- MAIN CODE -----
 
 params = Dict{String, Real}(
-    "nMMHK"   => parse(Int64, ARGS[1]),
-    "L"       => parse(Int64, ARGS[2]),
-    "mu"      => parse(Float64, ARGS[3]),
-    "U"       => parse(Float64, ARGS[4]),
-    "g"       => parse(Float64, ARGS[5]),
-    "T"       => parse(Float64, ARGS[6]),
-    "nTarget" => parse(Float64, ARGS[7])
+    "nMMHK" => 2,
+    "L" => 30000,
+    "mu" => 0,
+    "U" => 0,
+    "g" => 0,
+    "T" => 0.0,
+    "nTarget" => -1.0
 )
 
 sweep1 = Dict(
-    "param" => ARGS[8],
-    "min"   => parse(Float64, ARGS[9]),
-    "max"   => parse(Float64, ARGS[10]),
-    "ste"   => parse(Int64, ARGS[11]),
-    "eps"   => parse(Float64, ARGS[12])
+    "param" => "mu",
+    "save" => "mu",
+    "min" => -2 - params["U"] - params["g"],
+    "max" => +2 + params["U"] + params["g"],
+    "ste" => 4,
+    "eps" => 0.001
 )
-
-println(params)
-println(sweep1)
 
 @time plot1D(params, sweep1, false)

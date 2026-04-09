@@ -11,11 +11,8 @@ in_file = "code.jl"
 out_file = "Cluster Test 1.test"
 
 # Thread counts to test
-tt = [1, 2, 4]
+tt = [1, 2, 4, 8, 16, 32, 64, 128, 192]
 ss = []
-
-# Create outputs folder
-mkpath(joinpath(@__DIR__, "outputs"))
 
 # Save the data next to this file
 save_path = joinpath(@__DIR__, "outputs", out_file)

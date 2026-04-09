@@ -657,78 +657,42 @@ end
 
 
 
+## ----- RUN THE SOLVER -----
+function compute(params::Dict{String, Real})
 
-## ----- PARAMETER SWEEPS -----
-function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, progress::Bool = false)
-    # Sweep the given parameter
-    ss = collect(range(sweep1["min"], sweep1["max"], length=sweep1["ste"]))
-    oo = []
-
-    # Warning that we have a target filling
+    # Go for target filling
     if params["nTarget"] >= 0
-        println("Going for target filling n = $(params["nTarget"])")
+        # Get minimum and maximum from the parameters
+        mu_min = params["mu_min"]
+        mu_max = params["mu_max"]
+        mu_eps = params["mu_eps"]
+
+        # Bissect for mu
+        mu = bissect(mu_test -> solve(params["nMMHK"], params["L"], mu_test, params["U"], params["g"], params["T"])["n"] - params["nTarget"], mu_min, mu_max, mu_eps)
+
+        # Update mu
+        params["mu"] = mu
     end
 
-    for (prog1, val1) in enumerate(ss)
-
-        if progress
-            print("\rCurrent iteration: $prog1 / $(length(ss))")
-            flush(stdout)
-        end
-
-        # If are sweeping the filling or there is a specific filling to achieve, we need to converge for mu
-        if (sweep1["param"] == "n") || (params["nTarget"] >= 0)
-            # Estimate minimum and maximum values from bandwith
-            mu_min = -2.2 - params["g"]
-            mu_max = +2.2 + params["U"] + params["g"]
-            mu_eps = sweep1["eps"]
-
-            # Bissect for mu
-            mu = bissect(mu -> solve(params["nMMHK"], params["L"], mu, params["U"], params["g"], params["T"])["n"] - (sweep1["param"] == "n" ? val1 : params["nTarget"]), mu_min, mu_max, mu_eps)
-
-            # Update mu
-            params["mu"] = mu
+    # File title
+    file_arr = []
+    for (key, value) in params
+        if key in ["runID", "mu", "mu_min", "mu_max", "mu_eps", "nTarget"]
+            continue
         else
-            # Set the given parameter to the value we are sweeping
-            params[sweep1["param"]] = val1
+            push!(file_arr, "$key=$value")
         end
-
-        # Compute and get the output
-        output = solve(params["nMMHK"], params["L"], params["mu"], params["U"], params["g"], params["T"])
-
-        # Add this output dictionary to the list
-        push!(oo, output)
     end
+    file_str = string(params["runID"]) * "-" * join(file_arr, "-") * ".h5"
 
-    # Start of the title
-    title_start = "Changing-" * sweep1["param"] * "-with-"
+    # Compute and get the output
+    output = solve(params["nMMHK"], params["L"], params["mu"], params["U"], params["g"], params["T"])
 
-    # Plot title
-    title_str = replace(
-        "$(collect((key == sweep1["param"]) || (key == "mu") || (key == "nTarget")  ? "" : "$key = $value" for (key, value) in params))"
-        * (params["nTarget"] >= 0 ? "n = $(params["nTarget"])" : "") , r"[\"\[\],]" => ""
-    )
-    title_str = title_start * rstrip(title_str)
-
-    file_str = replace(replace(replace(title_str, " = " => ""), " " => "-"), "--" => "-") * ".h5"
-
-    # Create outputs folder
-    mkpath(joinpath(@__DIR__, "outputs"))
-
-    # Save the data next to this file
+    # Save the data into this file
     save_path = joinpath(@__DIR__, "outputs", file_str)
-
-    # Convert arrays
-    ssTyped = Float64.(ss)
 
     # Save the data
     hdf.h5open(save_path, "w") do file
-
-        # Write the number of threads used
-        hdf.write(file, "nthreads", Threads.nthreads())
-
-        # Save outputs
-        hdf.write(file, "ss_data", ssTyped)
         
         # Save the parameters
         g_params = hdf.create_group(file, "params")
@@ -736,53 +700,39 @@ function plot1D(params::Dict{String, Real}, sweep1::Dict{String, Any}, progress:
             hdf.write(g_params, k, v)
         end
         
-        # Save the sweep
-        g_sweep = hdf.create_group(file, "sweep1")
-        for (k, v) in sweep1
-            hdf.write(g_sweep, k, v)
-        end
-        
         # Save the outputs
-        g_out = hdf.create_group(file, "output")
-
-        # Extract keys from the first output dictionary
-        for k in keys(oo[1])
-            # Gather values for this key, for all iterations
-            gathered_values = [out[k] for out in oo]
-
-            # Promote from Vector{Any} to a concrete type for HDF5 compatibility
-            val_type = typeof(oo[1][k])
-            typed_values = val_type.(gathered_values)
-
-            # Write the output
-            hdf.write(g_out, String(k), typed_values)
+        g_out = hdf.create_group(file, "out")
+        for (k, v) in output
+            hdf.write(g_out, k, v)
         end
+
     end
 end
 
 
 
 ## ----- MAIN CODE -----
+runID = parse(Int64, ARGS[1])
+nMMHK = parse(Int64, ARGS[2])
+L = parse(Int64, ARGS[3])
+mu = parse(Float64, ARGS[4])
+U = parse(Float64, ARGS[5])
+g = parse(Float64, ARGS[6])
+T = parse(Float64, ARGS[7])
+nTarget = parse(Float64, ARGS[8])
 
 params = Dict{String, Real}(
-    "nMMHK"   => parse(Int64, ARGS[1]),
-    "L"       => parse(Int64, ARGS[2]),
-    "mu"      => parse(Float64, ARGS[3]),
-    "U"       => parse(Float64, ARGS[4]),
-    "g"       => parse(Float64, ARGS[5]),
-    "T"       => parse(Float64, ARGS[6]),
-    "nTarget" => parse(Float64, ARGS[7])
+    "runID"   => runID,
+    "nMMHK"   => nMMHK,
+    "L"       => L,
+    "mu"      => mu,
+    "U"       => U,
+    "g"       => g,
+    "T"       => T,
+    "nTarget" => nTarget,
+    "mu_min"  => -2.2 - T,
+    "mu_max"  => +2.2 + U + g + T,
+    "mu_eps"  => 0.0001,
 )
 
-sweep1 = Dict(
-    "param" => ARGS[8],
-    "min"   => parse(Float64, ARGS[9]),
-    "max"   => parse(Float64, ARGS[10]),
-    "ste"   => parse(Int64, ARGS[11]),
-    "eps"   => parse(Float64, ARGS[12])
-)
-
-println(params)
-println(sweep1)
-
-@time plot1D(params, sweep1, false)
+@time compute(params)

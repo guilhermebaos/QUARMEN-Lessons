@@ -11,7 +11,7 @@ in_file = "code.jl"
 out_file = "Cluster Test 1.test"
 
 # Thread counts to test
-tt = [1, 2, 4]
+tt = [1, 2, 4, 8, 16, 32, 64, 128, 192]
 ss = []
 
 # Create outputs folder
@@ -26,7 +26,7 @@ time1 = 0.0
 # Test every thread count
 for t in tt
     # Launch julia with -t flag
-    runtime = @elapsed run(`julia -t $t $(joinpath(@__DIR__, in_file)) 2 3600 -1 0 0 0 -1 mu -2 2 1 0.001`)
+    runtime = @elapsed run(`julia -t $t $(joinpath(@__DIR__, in_file)) 2 1920000 -1 0 0 0 -1 mu -2 2 1 0.001`)
     
     if t == 1
         global time1 = runtime
