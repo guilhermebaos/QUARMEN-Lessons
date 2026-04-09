@@ -8,14 +8,14 @@ println("Starting speed test!")
 in_file = "code.jl"
 
 # Output file name
-out_file = "Cluster Test 1.test"
+out_file = "speed.test"
 
 # Thread counts to test
-tt = [1, 2, 4, 8, 16, 32, 64, 128, 192]
+tt = [192, 128, 64, 32, 16, 8, 4, 2, 1]
 ss = []
 
 # Save the data next to this file
-save_path = joinpath(@__DIR__, "outputs", out_file)
+save_path = joinpath(@__DIR__, out_file)
 
 # Base time, for one thread
 time1 = 0.0
@@ -23,7 +23,7 @@ time1 = 0.0
 # Test every thread count
 for t in tt
     # Launch julia with -t flag
-    runtime = @elapsed run(`julia -t $t $(joinpath(@__DIR__, in_file)) 2 3600 -1 0 0 0 -1 mu -2 2 1 0.001`)
+    runtime = @elapsed run(`julia -t $t $(joinpath(@__DIR__, in_file)) $t 2 192000 0 0 0 0 -1`)
     
     if t == 1
         global time1 = runtime

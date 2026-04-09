@@ -34,6 +34,7 @@ nTarget=$varVal
 # Load Julia
 module load julia
 
+# Switch to new project!
 # Path to the project files (.toml files)
 export JULIA_PROJECT="/project/6108152/gbotelho/"
 
