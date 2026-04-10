@@ -347,7 +347,6 @@ function buildOpsSubs(spin::Int, states::Vector{Int}, lookup::Dict{Int, Int}, nM
     end
 
     # Staggered magnetization along z
-    # The square can be computed element-wise because the matrix is diagonal
     if nMMHK == 2
         ops["afmk_z"] .= ops["fmk_z_1"] .- ops["fmk_z_2"]
     end

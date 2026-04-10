@@ -8,7 +8,7 @@ in_file = "code.jl"
 out_file = "speed.test"
 
 # Thread counts to test
-tt = [192, 128, 64, 32, 16, 8, 4, 2, 1]
+tt = [32, 16, 8, 4, 2, 1]
 rr = []
 
 # Save the data next to this file
@@ -20,7 +20,7 @@ time1 = 0.0
 # Test every thread count
 for t in tt
     # Launch julia with -t flag
-    runtime = @elapsed run(`julia -t $t $(joinpath(@__DIR__, in_file)) $t 3 2000 0 0 0 0 -1`)
+    runtime = @elapsed run(`julia -t $t $(joinpath(@__DIR__, in_file)) $t 2 1920000 0 0 0 0 -1`)
     push!(rr, runtime)
 end
 
