@@ -43,6 +43,7 @@ Create the minimal tight-binding Hamiltonian for n-layer rhombohedral graphene.
 """
 function hamMin!(n::Int64, gam0::Real, gam1::Real, V::Real, kx:: Real, ky::Real, hamArray::Matrix{Complex{Float64}})
     # Write the Hamiltonian into hamArray
+    hamArray .= 0
     for layer in 1:n
         # Relevant sites
         Asite = 2*layer - 1
@@ -57,14 +58,23 @@ function hamMin!(n::Int64, gam0::Real, gam1::Real, V::Real, kx:: Real, ky::Real,
 
         # Inter-layer hopping γ1
         if layer != n
-            hamArray[Bsite, Bsite + 1] = gam1
+            hamArray[Bsite, Asite + 2] = gam1
         end
     end
 end
 
 
+
+"""
+Create the minimal tight-binding Hamiltonian for n-layer rhombohedral graphene, differentiated along kx.
+
+
+### Returns
+- `hamArray`: Overwriten matrix hamArray with the new Hamiltonian (not just upper-triangular!).
+"""
 function delxhamMin!(n::Int64, gam0::Real, kx:: Real, ky::Real, hamArray::Matrix{Complex{Float64}})
     # Write the Hamiltonian into hamArray
+    hamArray .= 0
     for layer in 1:n
         # Relevant sites
         Asite = 2*layer - 1
@@ -72,12 +82,14 @@ function delxhamMin!(n::Int64, gam0::Real, kx:: Real, ky::Real, hamArray::Matrix
 
         # Intra-layer hopping γ0
         hamArray[Asite, Bsite] = -gam0 * delxfunc(kx, ky)
+        hamArray[Bsite, Asite] = -gam0 * conj(delxfunc(kx, ky))
     end
 end
 
 
 function delyhamMin!(n::Int64, gam0::Real, kx:: Real, ky::Real, hamArray::Matrix{Complex{Float64}})
     # Write the Hamiltonian into hamArray
+    hamArray .= 0
     for layer in 1:n
         # Relevant sites
         Asite = 2*layer - 1
@@ -85,6 +97,7 @@ function delyhamMin!(n::Int64, gam0::Real, kx:: Real, ky::Real, hamArray::Matrix
 
         # Intra-layer hopping γ0
         hamArray[Asite, Bsite] = -gam0 * delyfunc(kx, ky)
+        hamArray[Bsite, Asite] = -gam0 * conj(delyfunc(kx, ky))
     end
 end
 
@@ -221,7 +234,7 @@ function plotBerry(L::Int64, n::Int64, gam0::Real, gam1::Real, V::Real, viewK::R
     omega_matrix = reshape(omega, length(kky), length(kkx))
 
     # Divide by the maximum value
-    omega_matrix ./= maximum(omega_matrix)
+    omega_matrix /= maximum(abs.(omega_matrix))
 
     # Initialize the plot
     return heatmap(kkx / Diracx, kky / Diracx, omega_matrix, xlabel="kx / K", ylabel="ky / K", colorbar_title = "Ωn / Ωmax", colorbar_width = 3, title = "\nBerry of band $bandN \n With n = $n, V = $V\n\n")
@@ -231,13 +244,13 @@ end
 
 
 ## --- Parameters ---
-L = 300
+L = 350
 n = 5
 gam0 = 2600
 gam1 = 360
 V = 25
-viewK = 0.1
-bandN = n
+viewK = 1.1
+bandN = n + 1
 limy = 500
 
 
@@ -248,7 +261,7 @@ pp = []
 
 nn = collect(3:1:7)
 for paramN in nn
-    hm = plotBerry(L, paramN, gam0, gam1, V, viewK, bandN)
+    hm = plotBerry(L, paramN, gam0, gam1, V, viewK, paramN + 1)
     push!(hh, hm)
 
     pl = plotBands(20*L, paramN, gam0, gam1, V, viewK, limy)
@@ -256,7 +269,7 @@ for paramN in nn
 end
 
 plot(pp..., layout = (1, length(nn)), size=(2000, 500), left_margin = 5mm, right_margin = 5mm, top_margin = 10mm, bottom_margin = 10mm)
-plot(hh..., layout = (1, length(nn)), size=(2000, 500), left_margin = 5mm, right_margin = 5mm, top_margin = 10mm, bottom_margin = 10mm)
+plot(hh..., layout = (2, div(length(nn), 2) + 1), size=(2000, 900), left_margin = 5mm, right_margin = 5mm, top_margin = 10mm, bottom_margin = 10mm)
 
 
 
