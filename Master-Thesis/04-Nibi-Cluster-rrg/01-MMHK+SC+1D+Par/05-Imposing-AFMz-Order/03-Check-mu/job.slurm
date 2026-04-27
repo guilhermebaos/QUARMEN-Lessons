@@ -1,6 +1,6 @@
 #!/bin/bash
 
-#SBATCH --job-name="04-Measuring-AFMz"
+#SBATCH --job-name="05-Imposing-AFMz"
 #SBATCH --account=rrg-vcrepel
 
 #SBATCH --time=02:30:00

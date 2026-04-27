@@ -6,7 +6,8 @@ import HDF5 as hdf
 # Parallelization
 using Base.Threads
 
-### ----- HELPER FUNCTIONS -----
+
+## ----- HELPER FUNCTIONS -----
 """
     bissect(func, a, b, eps, maxI, mult)
 
@@ -606,7 +607,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
                     sub.vecs .= eigensolved.vectors
                 end
 
-                # --- COMPUTE THE BOLTZMANN EXPONENTIAL ---
+                # --- COMPUTE THE BOLTZMANN EXPONENTIAL AND OBSERVABLES ---
 
                 # Join all the eigenvalues
                 index_vals = 1
@@ -690,7 +691,7 @@ function solve(nMMHK::Int, L::Int, mu::Real, U::Real, g::Real, T::Real, delta_st
         "n" => n,
         "Kxx" => Kxx,
         "Delta" => delta_start,
-        "afm_z_sq" => afm_z
+        "afm_z" => afm_z
     )
 
     return outputs
@@ -699,7 +700,7 @@ end
 
 
 ## ----- RUN THE SOLVER -----
-function compute(params::Dict{String, Real})
+function compute!(params::Dict{String, Real})
 
     # Go for target filling
     if params["nTarget"] >= 0
@@ -708,9 +709,21 @@ function compute(params::Dict{String, Real})
         mu_max = params["mu_max"]
         mu_eps = params["mu_eps"]
 
+        # TODO: Find a way to improve this bissection by passing the delta of the previous iteration to the next one
+        
+        # Keep track of the last converged delta in the bissection
+        last_delta = 1e-2 + 0im
+        
         # Bissect for mu
-        mu = bissect(mu_test -> solve(params["nMMHK"], params["L"], mu_test, params["U"], params["g"], params["T"])["n"] - params["nTarget"], mu_min, mu_max, mu_eps)
+        mu = bissect(mu_min, mu_max, mu_eps) do mu_test
 
+            # Pass the last_delta into solve, and update it with the result
+            res = solve(params["nMMHK"], params["L"], mu_test, params["U"], params["g"], params["T"], last_delta)
+            last_delta = res["Delta"]
+
+            return res["n"] - params["nTarget"]
+
+        end
         # Update mu
         params["mu"] = mu
     end
@@ -776,4 +789,4 @@ params = Dict{String, Real}(
     "mu_eps"  => 0.0001,
 )
 
-@time compute(params)
+@time compute!(params)
