@@ -1,0 +1,57 @@
+\begin{align*}
+
+\begin{array}{c|c|c|c|c}
+
+N_\mathbf k & S_\mathbf k^z & \text{Index} & \text{State} & \text{Eigenvalue}
+\\[0.2cm] \hline \\[-0.2cm]
+
+0 & 0 & \ket 0 & \ket{0000} & 0
+\\[0.2cm] \hline \\[-0.2cm]
+1 & -1 & \ket 1 & \frac1{\sqrt2}(\ket{0100} + \ket{0001}) & t_d + |t^{AB}| 
+
+\\[0.2cm] \hline \\[-0.2cm]
+&  & \ket 2 & \frac1{\sqrt2}(\ket{0100} - \ket{0001}) & t_d - |t^{AB}|
+
+\\[0.2cm] \hline \\[-0.2cm]
+1 & +1 & \ket 3 & \frac1{\sqrt2}(\ket{1000} + \ket{0010}) & t_d + |t^{AB}| 
+
+\\[0.2cm] \hline \\[-0.2cm]
+&  & \ket 4 & \frac1{\sqrt2}(\ket{1000} - \ket{0010}) & t_d - |t^{AB}|
+
+\\[0.2cm] \hline \\[-0.2cm]
+2 & -2 & \ket 5 & \ket{0101} & 2t_d
+
+\\[0.2cm] \hline \\[-0.2cm]
+2 & 0 & \ket 6 & \frac1{\sqrt2}(\ket{0110} + \ket{1001}) & 2t_d 
+
+\\[0.2cm] \hline \\[-0.2cm]
+&  & \ket 7 & \frac1{\sqrt2}(\ket{1100} - \ket{0011}) & 2t_d + U 
+
+\\[0.2cm] \hline \\[-0.2cm]
+&  & \ket 8 & 2t_o(\ket{1100} + \ket{0011}) + \frac12(U - \sqrt{U^2 + 16 |t_o|^2})(\ket{0110} - \ket{1001}) & 2t_d + \frac12(U + \sqrt{U^2 + 16 |t_o|^2}) 
+
+\\[0.2cm] \hline \\[-0.2cm]
+&  & \ket 9 & 2t_o(\ket{1100} + \ket{0011}) + \frac12(U + \sqrt{U^2 + 16 |t_o|^2})(\ket{0110} - \ket{1001}) & 2t_d + \frac12(U - \sqrt{U^2 + 16 |t_o|^2})
+
+\\[0.2cm] \hline \\[-0.2cm]
+2 & +2 & \ket{10} & \ket{1010} & 2t_d
+
+\\[0.2cm] \hline \\[-0.2cm]
+3 & -1 & \ket{11} & \frac1{\sqrt2}(\ket{1101} - \ket{0111}) & 3t_d + U + |t^{AB}| 
+
+\\[0.2cm] \hline \\[-0.2cm]
+&  & \ket{12} & \frac1{\sqrt2}(\ket{1101} + \ket{0111}) & 3t_d + U - |t^{AB}|
+
+\\[0.2cm] \hline \\[-0.2cm]
+3 & +1 & \ket{13} & \frac1{\sqrt2}(\ket{1110} - \ket{1011}) & 3t_d + U + |t^{AB}| 
+
+\\[0.2cm] \hline \\[-0.2cm]
+&  & \ket{14} & \frac1{\sqrt2}(\ket{1110} + \ket{1011}) & 3t_d + U - |t^{AB}|
+
+\\[0.2cm] \hline \\[-0.2cm]
+4 & 0 & \ket{15} & \ket{1111} & 4t_d + 2U 
+
+
+\end{array}
+
+\end{align*}
